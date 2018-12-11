@@ -84,11 +84,11 @@ class SpotifyDataset(Dataset):
         
         # Prepare 'session_start_end_idx' from 'session_split_indices'
         _sess_split = np.load(fpath_sess_spl_idx) # shape=(index,)   
-        if self.data_sel is not None:
-            _sess_split = _sess_split[range(data_sel[0], data_sel[1])]
         self.session_start_end_idx = np.empty(shape=(len(_sess_split), 2), dtype=np.uint32)
         self.session_start_end_idx[:,0]   = _sess_split        
         self.session_start_end_idx[:,1] = np.r_[_sess_split[1:], len(self.dt_mm)-1]
+        if self.data_sel is not None:
+            self.session_start_end_idx = self.session_start_end_idx[range(data_sel[0], data_sel[1]),:]
         
         # Prepare 'track_feat' 
         self.track_feat = np.load(TRACK_FEAT_NPY_PATH) 
