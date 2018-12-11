@@ -21,6 +21,8 @@ if len(sys.argv) > 1:
 else:
     config_fpath = "./config_init_dataset.json"  
 
+def main():
+    init_dataset()
 
 
 def init_dataset(config_fpath=config_fpath):
@@ -132,3 +134,6 @@ def init_dataset(config_fpath=config_fpath):
     np.save(OUTPUT_TR_SESSION_SPLIT_IDX_PATH, session_split_idx)
     ###########################################################################    
     return None
+
+if __name__ == '__main__':
+    main()
