@@ -13,6 +13,7 @@ NOTE: Don't use date from user-log data. We found some weird dates, log_6_201809
 import pandas as pd
 import numpy as np
 import sys, glob, os
+from tqdm import tqdm
 from utils.save_load_config import load_config
 from sklearn.preprocessing import StandardScaler
 
@@ -78,7 +79,7 @@ def init_dataset(config_fpath=config_fpath):
     dtmm_old_shape = (0,0)
     index_start_from = 0 # keep the last number of items in user-log-data
     
-    for file_count, fpath in enumerate(glob.glob(os.path.join(TR_LOG_DATA_ROOT, "*.csv"))):
+    for file_count, fpath in enumerate(tqdm(glob.glob(os.path.join(TR_LOG_DATA_ROOT, "*.csv")))):
         print("Collecting data from" + fpath, flush=True)
         df = pd.read_csv(fpath, index_col=False, header=0)#, nrows=200)#usecols=[0,1])
 
@@ -128,7 +129,7 @@ def init_dataset(config_fpath=config_fpath):
         dtmm[dtmm_old_shape[0]:, :] = dt
         dtmm.flush;  # Force writing to disk
         dtmm_old_shape = dtmm_new_shape
-        print('dtmm-writer {0:4d}: New memmap size is {1:.2f}Gb.'.format(file_count, dtmm_new_shape[0]*dtmm_new_shape[1]/2**30))        
+        tqdm.write('dtmm-writer {0:4d}: New memmap size is {1:.2f}Gb.'.format(file_count, dtmm_new_shape[0]*dtmm_new_shape[1]/2**30))        
         
     # Save the output session split index...
     np.save(OUTPUT_TR_SESSION_SPLIT_IDX_PATH, session_split_idx)
