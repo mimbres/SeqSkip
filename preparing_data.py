@@ -40,8 +40,8 @@ def init_dataset(config_fpath=config_fpath):
     ## Track Features #########################################################
     # Load track_ids from Track-features, and merge them all...
     feat_all = pd.DataFrame()
-    for fpath in glob.glob(os.path.join(TRACK_FEATURES_ROOT, "*.csv")):
-        print("Collecting data from" + fpath)
+    for fpath in tqdm(glob.glob(os.path.join(TRACK_FEATURES_ROOT, "*.csv"))):
+        tqdm.write("Collecting data from" + fpath)
         feat_all = feat_all.append(pd.read_csv(fpath, index_col=False, header=0), # usecols=[0] takes only track_ids
                                    ignore_index = True)        
 
@@ -80,7 +80,7 @@ def init_dataset(config_fpath=config_fpath):
     index_start_from = 0 # keep the last number of items in user-log-data
     
     for file_count, fpath in enumerate(tqdm(glob.glob(os.path.join(TR_LOG_DATA_ROOT, "*.csv")))):
-        print("Collecting data from" + fpath, flush=True)
+        tqdm.write("Collecting data from" + fpath, flush=True)
         df = pd.read_csv(fpath, index_col=False, header=0)#, nrows=200)#usecols=[0,1])
 
         # Convert hash ids(string) into indices(int)
