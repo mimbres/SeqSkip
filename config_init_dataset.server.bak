@@ -1,0 +1,6 @@
+{
+"tr_log_data_root": "/DATA/SeqSkip/training_set/",
+"ts_log_data_root": "/DATA/SeqSkip/test_set/",
+"track_features_root": "/DATA/SeqSkip/track_features/",
+"output_data_root": "./data/"
+}

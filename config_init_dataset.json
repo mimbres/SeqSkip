@@ -1,0 +1,6 @@
+{
+"tr_log_data_root": "/mnt/ssd2/SeqSkip/training_set/",
+"ts_log_data_root": "/mnt/ssd3/test_set/",
+"track_features_root": "/mnt/ssd3/track_features/",
+"output_data_root": "./data/"
+}
