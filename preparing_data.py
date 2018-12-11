@@ -80,7 +80,7 @@ def init_dataset(config_fpath=config_fpath):
     index_start_from = 0 # keep the last number of items in user-log-data
     
     for file_count, fpath in enumerate(tqdm(glob.glob(os.path.join(TR_LOG_DATA_ROOT, "*.csv")))):
-        tqdm.write("Collecting data from" + fpath, flush=True)
+        tqdm.write("Collecting data from" + fpath)
         df = pd.read_csv(fpath, index_col=False, header=0)#, nrows=200)#usecols=[0,1])
 
         # Convert hash ids(string) into indices(int)
