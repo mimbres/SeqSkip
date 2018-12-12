@@ -13,7 +13,7 @@ NOTE: Don't use date from user-log data. We found some weird dates, log_6_201809
 import pandas as pd
 import numpy as np
 import sys, glob, os, re
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from utils.save_load_config import load_config
 from sklearn.preprocessing import StandardScaler
 
@@ -181,7 +181,7 @@ def init_tsdataset(dict_track_id, config_fpath=config_fpath):
         
         # Pack data for new each session
         dt = np.zeros(shape=(num_log_rows, 23), dtype=np.uint8) 
-        for i in range(num_sess):
+        for i in trange(num_sess, desc='Pack data loop', position=1):
             # [0,1,2,3]       | track_id                                        | int32 (packed as 4 uint8)
             # [4,5,6,7]       | date                                            | int32 (packed as 4 uint8) 
             # [8]             | hour                                            | uint8
@@ -213,7 +213,7 @@ def init_tsdataset(dict_track_id, config_fpath=config_fpath):
 
         # Generate & append session split index
         session_split_idx = np.hstack((session_split_idx, _dt_sess_head_idx + index_start_from))   
-        index_start_from += len(num_log_rows)
+        index_start_from += num_log_rows
 
         
         # Write to memmap file...
