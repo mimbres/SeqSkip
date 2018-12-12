@@ -1,2 +1,3 @@
 data/*.dat
 data/*.npy
+save/*/*.pth

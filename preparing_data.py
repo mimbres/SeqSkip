@@ -35,6 +35,8 @@ def init_dataset(config_fpath=config_fpath):
     OUTPUT_FEAT_NPY_PATH = config.output_data_root + "track_feat.npy"
     OUTPUT_TR_SESSION_SPLIT_IDX_PATH = config.output_data_root + "tr_session_split_idx.npy"
     OUTPUT_TR_LOG_MEMMAP_DAT_PATH = config.output_data_root + "tr_log_memmap.dat"
+    OUTPUT_TS_SESSION_SPLIT_IDX_PATH = config.output_data_root + "ts_session_split_idx.npy"
+    OUTPUT_TS_LOG_MEMMAP_DAT_PATH = config.output_data_root + "ts_log_memmap.dat"
     os.makedirs(os.path.dirname(config.output_data_root), exist_ok=True)
     
     ## Track Features #########################################################

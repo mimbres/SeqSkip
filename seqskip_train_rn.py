@@ -12,38 +12,42 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import StepLR
 import numpy as np
-import os
+import glob, os
 import argparse
 from tqdm import trange, tqdm 
 from spotify_data_loader import SpotifyDataloader
 
-parser = argparse.ArgumentParser(description="One Shot Visual Recognition")
+parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
+parser.add_argument("-s","--save_path",type = str, default = "./save/exp1/")
+parser.add_argument("-l","--load_continue_latest",type = str, default = None)
 parser.add_argument("-f","--feature_dim",type = int, default = 64)
 parser.add_argument("-r","--relation_dim",type = int, default = 8)
 parser.add_argument("-w","--class_num",type = int, default = 2)
-parser.add_argument("-s","--min_support_num_per_class",type = int, default = 1)
-parser.add_argument("-q","--min_query_num_per_class",type = int, default = 0)
 parser.add_argument("-e","--epochs",type = int, default= 1000)
 parser.add_argument("-t","--test_episode", type = int, default = 1000)
-parser.add_argument("-l","--learning_rate", type = float, default = 0.001)
+parser.add_argument("-lr","--learning_rate", type = float, default = 0.001)
 parser.add_argument("-g","--gpu",type=int, default=0)
 #parser.add_argument("-e","--embed_hidden_unit",type=int, default=2)
 args = parser.parse_args()
+
 
 # Hyper Parameters
 FEATURE_DIM = args.feature_dim
 RELATION_DIM = args.relation_dim
 CLASS_NUM = args.class_num
-MIN_SUPPORT_NUM_PER_CLASS = args.min_support_num_per_class
-MIN_QUERY_NUM_PER_CLASS = args.min_query_num_per_class
 EPOCHS = args.epochs
 TEST_EPISODE = args.test_episode
 LEARNING_RATE = args.learning_rate
 GPU = args.gpu
 
+# Model-save directory
+MODEL_SAVE_PATH = args.save_path
+os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
+
+
 # Trainset stats: 2072002577 items from 124950714 sessions
-print('Loading data...')
+print('Initializing dataloader...')
 mtrain_loader = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=True,
                                   data_sel=(0, 99965071), # 80% 트레인
@@ -52,9 +56,9 @@ mtrain_loader = SpotifyDataloader(config_fpath=args.config,
 
 mtest_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=True, # True, because we use part of trainset as testset
-                                  data_sel=(99965071, 100065071),#(99965071, 124950714), # 20%를 테스트
+                                  data_sel=(99965071, 99975071),#(99965071, 124950714), # 20%를 테스트
                                   batch_size=1,
-                                  shuffle=False) 
+                                  shuffle=True) 
 
 
 
@@ -99,14 +103,14 @@ class RelationNetwork(nn.Module):
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Linear') != -1:
-        n = m.weight.size(1)
+        #n = m.weight.size(1)
         m.weight.data.normal_(0, 0.01)
         m.bias.data = torch.ones(m.bias.data.size())
         
         
 # Init neural net
-FeatEnc = MLP(input_sz=70, hidden_sz=512, output_sz=256).cuda(GPU)
-RN      = RelationNetwork(input_sz=515).cuda(GPU)
+FeatEnc = MLP(input_sz=70, hidden_sz=512, output_sz=256).apply(weights_init).cuda(GPU)
+RN      = RelationNetwork(input_sz=515).apply(weights_init).cuda(GPU)
 
 FeatEnc_optim = torch.optim.Adam(FeatEnc.parameters(), lr=LEARNING_RATE)
 RN_optim      = torch.optim.Adam(RN.parameters(), lr=LEARNING_RATE)
@@ -118,6 +122,7 @@ RN_scheduler = StepLR(RN_optim, step_size=100000, gamma=0.2)
 #relation_net_optim#
 #%%
 hist_trloss = list()
+hist_tracc  = list()
 hist_vloss = list()
 hist_vacc    = list()
 
@@ -125,8 +130,8 @@ hist_vacc    = list()
 def validate():
     tqdm.write("Validation...")
     total_vloss    = 0
-    total_corrects = 0
-    total_query    = 0
+    total_vcorrects = 0
+    total_vquery    = 0
     val_sessions_iter = iter(mtest_loader)
     
     for val_session in trange(len(val_sessions_iter), desc='val-sessions', position=2):
@@ -156,24 +161,45 @@ def validate():
         loss = F.mse_loss(input=y_hat_relation, target=y_relation)
         total_vloss += loss.item()
         
-        sim_score = torch.FloatTensor(np.zeros((num_support*num_query,2))).cuda(GPU)
+        sim_score = torch.FloatTensor(np.zeros((num_support*num_query,2))).detach().cpu()
         sim_score[:,0] = y_hat_relation.view(-1) * (y_support_ext == 0).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 1).float()
         sim_score[:,1] = y_hat_relation.view(-1) * (y_support_ext == 1).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 0).float()
         sim_score = sim_score.view(num_query,-1,2) #8x7x2 (que x sup x class)
         y_query = labels[:, num_support:num_items, 1].long().cpu() # 8
-        total_corrects += np.sum((torch.argmax(sim_score.sum(1),1).cpu() == y_query).numpy())  
-        total_query += num_query
-        if (val_session+1)%2500 == 0:
-            tqdm.write("val_session:{0:}  loss:{1:.6f}  acc:{2:.4f}".format(val_session,loss.item(), total_corrects/total_query))
+        total_vcorrects += np.sum((torch.argmax(sim_score.sum(1),1).cpu() == y_query).numpy())  
+        total_vquery += num_query
+        if (val_session+1)%2000 == 0:
+            tqdm.write(np.array2string(sim_score.detach().cpu().numpy()))
+            tqdm.write(np.array2string(labels[:, :num_items, 1].detach().cpu().numpy().flatten()))
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
+            
         
     hist_vloss.append(total_vloss/val_session)
-    hist_vacc.append(total_corrects/total_query)
+    hist_vacc.append(total_vcorrects/total_vquery)
+    
 
-
-for epoch in trange(EPOCHS, desc='epochs', position=0):
+# Main
+if args.load_continue_latest is None:
+    START_EPOCH = 0
+else:
+    latest_fpath = max(glob.iglob(MODEL_SAVE_PATH + "check*.pth"),key=os.path.getctime)  
+    checkpoint = torch.load(latest_fpath)
+    tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['loss']))
+    FeatEnc.load_state_dict(checkpoint['FE_state'])
+    RN.load_state_dict(checkpoint['RN_state'])
+    FeatEnc_optim.load_state_dict(checkpoint['FE_opt_state'])
+    RN_optim.load_state_dict(checkpoint['RN_opt_state'])
+    FeatEnc_scheduler.load_state_dict(checkpoint['FE_sch_state'])
+    RN_scheduler.load_state_dict(checkpoint['RN_sch_state'])
+    START_EPOCH = checkpoint['ep']
+    
+    
+for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
     
     tqdm.write('Train...')
     sessions_iter = iter(mtrain_loader)
+    total_corrects = 0
+    total_query    = 0
     for session in trange(len(sessions_iter), desc='sessions', position=1):
         
         FeatEnc.train(); RN.train()
@@ -212,7 +238,6 @@ for epoch in trange(EPOCHS, desc='epochs', position=0):
         # Calcultate MSE loss
         loss = F.mse_loss(input=y_hat_relation, target=y_relation)
         
-        
         # Update Nets
         FeatEnc.zero_grad()
         RN.zero_grad()        
@@ -224,13 +249,34 @@ for epoch in trange(EPOCHS, desc='epochs', position=0):
         FeatEnc_optim.step()
         RN_optim.step()
         
-        if (session+1)%5000 == 0:
-            tqdm.write("session:{0:}  loss:{1:.6f}".format(session, loss.item()))
-            hist_trloss.append(loss)
+        # Train acc
+        sim_score = torch.FloatTensor(np.zeros((num_support*num_query,2))).detach().cpu()
+        sim_score[:,0] = y_hat_relation.view(-1) * (y_support_ext == 0).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 1).float()
+        sim_score[:,1] = y_hat_relation.view(-1) * (y_support_ext == 1).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 0).float()
+        sim_score = sim_score.view(num_query,-1,2) #8x7x2 (que x sup x class)
+        y_query = labels[:, num_support:num_items, 1].long().cpu() # 8
+        total_corrects += np.sum((torch.argmax(sim_score.sum(1),1).cpu() == y_query).numpy())  
+        total_query += num_query
+        if (session+1)%2000 == 0:
+            hist_trloss.append(loss.item())
+            hist_tracc.append(total_corrects/total_query)
+            tqdm.write(np.array2string(sim_score.detach().cpu().numpy()))
+            tqdm.write(np.array2string(labels[:, :num_items, 1].detach().cpu().numpy().flatten()))
+            tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(hist_trloss[-1], hist_tracc[-1]))
+            total_corrects = 0
+            total_query    = 0
+            
         
-        if (session+1)%50000 == 0:
+        if (session+1)%10000 == 0:
+            tqdm.write("session:{0:}  loss:{1:.6f}".format(session, loss.item()))
+        
+        if (session+1)%20000 == 0:
             # Validation
             validate()
+            # Save
+            torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': loss, 'hist_vacc': hist_vacc,
+                        'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
+            'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
          
             
 

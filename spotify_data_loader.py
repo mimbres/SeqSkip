@@ -59,8 +59,8 @@ class SpotifyDataset(Dataset):
         TR_LOG_MEMMAP_DAT_PATH    = config.output_data_root + "tr_log_memmap.dat"
         TR_SESSION_SPLIT_IDX_PATH = config.output_data_root + "tr_session_split_idx.npy"
         TR_LOG_DATA_SHAPE = (2072002577, 23)
-        #TS_LOG_MEMMAP_DAT_PATH    = config.output_data_root + "ts_log_memmap.dat"
-        #TS_SESSION_SPLIT_IDX_PATH = config.output_data_root + "ts_session_split_idx.npy"
+        TS_LOG_MEMMAP_DAT_PATH    = config.output_data_root + "ts_log_memmap.dat"
+        TS_SESSION_SPLIT_IDX_PATH = config.output_data_root + "ts_session_split_idx.npy"
         #TS_LOG_SHAPE = (, )
         
         self.mtrain_mode           = mtrain_mode
@@ -73,13 +73,14 @@ class SpotifyDataset(Dataset):
         if self.mtrain_mode:
             fpath_log_mm_dat   = TR_LOG_MEMMAP_DAT_PATH
             fpath_sess_spl_idx = TR_SESSION_SPLIT_IDX_PATH
+            log_data_shape     = TR_LOG_DATA_SHAPE
         else:
             fpath_log_mm_dat   = TS_LOG_MEMMAP_DAT_PATH
             fpath_sess_spl_idx = TS_SESSION_SPLIT_IDX_PATH
-        
+            log_data_shape     = TS_LOG_DATA_SHAPE
         
         # Import session log data: 'dt_mm' 
-        self.dt_mm = np.memmap(TR_LOG_MEMMAP_DAT_PATH, dtype='uint8', mode='r', shape=TR_LOG_DATA_SHAPE)
+        self.dt_mm = np.memmap(fpath_log_mm_dat, dtype='uint8', mode='r', shape=log_data_shape)
         
         
         # Prepare 'session_start_end_idx' from 'session_split_indices'
