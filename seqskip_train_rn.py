@@ -123,8 +123,8 @@ RN_scheduler = StepLR(RN_optim, step_size=100000, gamma=0.2)
 #%%
 hist_trloss = list()
 hist_tracc  = list()
-hist_vloss = list()
-hist_vacc    = list()
+hist_vloss  = list()
+hist_vacc   = list()
 
 
 def validate():
@@ -262,7 +262,7 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
             hist_tracc.append(total_corrects/total_query)
             tqdm.write(np.array2string(sim_score.detach().cpu().numpy()))
             tqdm.write(np.array2string(labels[:, :num_items, 1].detach().cpu().numpy().flatten()))
-            tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(hist_trloss[-1], hist_tracc[-1]))
+            tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(session, hist_trloss[-1], hist_tracc[-1]))
             total_corrects = 0
             total_query    = 0
             
