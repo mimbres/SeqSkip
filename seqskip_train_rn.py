@@ -86,11 +86,11 @@ class RelationNetwork(nn.Module):
                         nn.LayerNorm(512),
                         nn.ReLU())
         self.layer2 = nn.Sequential(
-                        nn.Linear(512, 128),
-                        nn.LayerNorm(128),
+                        nn.Linear(512, 256),
+                        nn.LayerNorm(256),
                         nn.ReLU())
-        self.fc1 = nn.Linear(128,32)
-        self.fc2 = nn.Linear(32,1)
+        self.fc1 = nn.Linear(256,10)
+        self.fc2 = nn.Linear(10,1)
 
     def forward(self,x):
         out = self.layer1(x)
@@ -109,7 +109,7 @@ def weights_init(m):
         
         
 # Init neural net
-FeatEnc = MLP(input_sz=29, hidden_sz=256, output_sz=64).apply(weights_init).cuda(GPU)
+FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).apply(weights_init).cuda(GPU)
 RN      = RelationNetwork(input_sz=172).apply(weights_init).cuda(GPU)
 
 FeatEnc_optim = torch.optim.Adam(FeatEnc.parameters(), lr=LEARNING_RATE)

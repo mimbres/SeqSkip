@@ -92,11 +92,11 @@ class RelationNetwork(nn.Module):
                         nn.LayerNorm(512),
                         nn.ReLU())
         self.layer2 = nn.Sequential(
-                        nn.Linear(512, 128),
-                        nn.LayerNorm(128),
+                        nn.Linear(512, 256),
+                        nn.LayerNorm(256),
                         nn.ReLU())
-        self.fc1 = nn.Linear(128,32)
-        self.fc2 = nn.Linear(32,1)
+        self.fc1 = nn.Linear(256,10)
+        self.fc2 = nn.Linear(10,1)
 
     def forward(self,x):
         out = self.layer1(x)
@@ -106,16 +106,9 @@ class RelationNetwork(nn.Module):
         out = F.sigmoid(self.fc2(out))
         return out
     
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Linear') != -1:
-        #n = m.weight.size(1)
-        m.weight.data.normal_(0, 0.01)
-        m.bias.data = torch.ones(m.bias.data.size())
-        
-        
+
 # Init neural net
-FeatEnc = MLP(input_sz=29, hidden_sz=256, output_sz=64).apply(weights_init).cuda(GPU)
+FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).apply(weights_init).cuda(GPU)
 RN      = RelationNetwork(input_sz=172).apply(weights_init).cuda(GPU)
 
 

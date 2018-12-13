@@ -2,3 +2,4 @@ data/*.dat
 data/*.npy
 save/*/*.pth
 _*.py
+submission/*.*
