@@ -6,6 +6,7 @@ Created on Tue Dec  4 01:27:50 2018
 @author: mimbres
 
 preprocessed trainset dtmm size = (2072002577, 23)
+preprocessed trainset dtmm size = (518260758, 23)
 
 NOTE: Don't use date from user-log data. We found some weird dates, log_6_20180918_000000000000.csv, index [1994795,...1994801] date=20320525 
 

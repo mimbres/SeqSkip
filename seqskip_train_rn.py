@@ -54,7 +54,7 @@ mtrain_loader = SpotifyDataloader(config_fpath=args.config,
                                   batch_size=1,
                                   shuffle=True) # shuffle은 True로 해야됨 나중에... 
 
-mtest_loader  = SpotifyDataloader(config_fpath=args.config,
+mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=True, # True, because we use part of trainset as testset
                                   data_sel=(99965071, 99975071),#(99965071, 124950714), # 20%를 테스트
                                   batch_size=1,
@@ -82,15 +82,15 @@ class RelationNetwork(nn.Module):
     def __init__(self, input_sz):
         super(RelationNetwork, self).__init__()
         self.layer1 = nn.Sequential(
-                        nn.Linear(input_sz, 256), # 56x1x515 -> 56x1x256
-                        nn.LayerNorm(256),
+                        nn.Linear(input_sz, 512), # 56x1x172 -> 56x1x512
+                        nn.LayerNorm(512),
                         nn.ReLU())
         self.layer2 = nn.Sequential(
-                        nn.Linear(256, 64),
-                        nn.LayerNorm(64),
+                        nn.Linear(512, 128),
+                        nn.LayerNorm(128),
                         nn.ReLU())
-        self.fc1 = nn.Linear(64,8)
-        self.fc2 = nn.Linear(8,1)
+        self.fc1 = nn.Linear(128,32)
+        self.fc2 = nn.Linear(32,1)
 
     def forward(self,x):
         out = self.layer1(x)
@@ -109,8 +109,8 @@ def weights_init(m):
         
         
 # Init neural net
-FeatEnc = MLP(input_sz=70, hidden_sz=512, output_sz=256).apply(weights_init).cuda(GPU)
-RN      = RelationNetwork(input_sz=515).apply(weights_init).cuda(GPU)
+FeatEnc = MLP(input_sz=29, hidden_sz=256, output_sz=64).apply(weights_init).cuda(GPU)
+RN      = RelationNetwork(input_sz=172).apply(weights_init).cuda(GPU)
 
 FeatEnc_optim = torch.optim.Adam(FeatEnc.parameters(), lr=LEARNING_RATE)
 RN_optim      = torch.optim.Adam(RN.parameters(), lr=LEARNING_RATE)
@@ -132,29 +132,31 @@ def validate():
     total_vloss    = 0
     total_vcorrects = 0
     total_vquery    = 0
-    val_sessions_iter = iter(mtest_loader)
+    val_sessions_iter = iter(mval_loader)
     
     for val_session in trange(len(val_sessions_iter), desc='val-sessions', position=2):
-        FeatEnc.eval(); RN.eval()
-        feats, labels, num_items, index = val_sessions_iter.next()
-        feats, labels = Variable(feats).cuda(GPU), Variable(labels).cuda(GPU) 
-        num_support = int(num_items/2) # 
+        FeatEnc.eval(); RN.eval();
+        feats, logs, labels, num_items, index = val_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS.
+        feats, logs, labels = Variable(feats).cuda(GPU), Variable(logs).cuda(GPU), Variable(labels).cuda(GPU)
+        num_support = int(num_items/2) # If num_items was odd number, query has one more item. 
         num_query   = int(num_items) - num_support
         
-        x_support = feats[:, :num_support, :].permute(1,0,2) # 7x1x70
-        x_query   = feats[:, num_support:num_items, :].permute(1,0,2) # 8x1*70 (batch x ch x dim)
-        x_feat_support = FeatEnc(x_support) # 7x1x256
-        x_feat_query   = FeatEnc(x_query)   # 8x1x256
-        x_feat_support = torch.cat((x_feat_support, labels[:, :num_support, :].view(-1,1,3)), 2) #7x1x259
-        x_feat_support_ext = x_feat_support.unsqueeze(0).repeat(num_query,1,1,1) # 8x7x1*259
-        x_feat_query_ext   = x_feat_query.unsqueeze(0).repeat(num_support,1,1,1) # 7x8x1*256
-        x_feat_query_ext = torch.transpose(x_feat_query_ext,0,1) # 8x7x1*256
-        x_feat_relation_pairs = torch.cat((x_feat_support_ext, x_feat_query_ext),3) # 8x7x1*515
-        x_feat_relation_pairs = x_feat_relation_pairs.view(num_support*num_query, 1, -1) # 56x1*515
+        x_support = feats[:, :num_support, :].permute(1,0,2) # 7x1x29
+        x_query   = feats[:, num_support:num_items, :].permute(1,0,2) # 8x1*29 (batch x ch x dim)
+        x_feat_support = FeatEnc(x_support) # 7x1x64
+        x_feat_query   = FeatEnc(x_query)   # 8x1x64
+        # - concat support los(d=41) and labels(d=3) to feat_support: QUERY SHOULD NOT INCLUDE THESE...
+        _extras = torch.cat((logs[:, :num_support, :],labels[:, :num_support, :]), 2)
+        x_feat_support = torch.cat((x_feat_support, _extras.view(-1,1,44)), 2) #7x1x108
+        x_feat_support_ext = x_feat_support.unsqueeze(0).repeat(num_query,1,1,1) # 8x7x1*108
+        x_feat_query_ext   = x_feat_query.unsqueeze(0).repeat(num_support,1,1,1) # 7x8x1*64
+        x_feat_query_ext = torch.transpose(x_feat_query_ext,0,1) # 8x7x1*64
+        x_feat_relation_pairs = torch.cat((x_feat_support_ext, x_feat_query_ext),3) # 8x7x1*172
+        x_feat_relation_pairs = x_feat_relation_pairs.view(num_support*num_query, 1, -1) # 56x1*172
         
-        y_support_ext = labels[:, :num_support, 1].view(-1).repeat(num_query) # 1x7->1x56
+        y_support_ext = labels[:, :num_support, 1].view(-1).repeat(num_query) # [56]
         y_query_ext   = labels[:, num_support:num_items, 1].repeat(num_support,1) 
-        y_query_ext   = torch.transpose(y_query_ext,0,1).contiguous().view(-1) # 1x8->1x56
+        y_query_ext   = torch.transpose(y_query_ext,0,1).contiguous().view(-1) # [56]
         y_relation = (y_support_ext==y_query_ext).float().view(-1,1)  # 56x1
         y_hat_relation = RN(x_feat_relation_pairs) # 56x1
         
@@ -165,12 +167,15 @@ def validate():
         sim_score[:,0] = y_hat_relation.view(-1) * (y_support_ext == 0).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 1).float()
         sim_score[:,1] = y_hat_relation.view(-1) * (y_support_ext == 1).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 0).float()
         sim_score = sim_score.view(num_query,-1,2) #8x7x2 (que x sup x class)
-        y_query = labels[:, num_support:num_items, 1].long().cpu() # 8
-        total_vcorrects += np.sum((torch.argmax(sim_score.sum(1),1).cpu() == y_query).numpy())  
+        y_query = labels[:, num_support:num_items, 1].detach().cpu().long().numpy() # 8
+        y_pred  = torch.argmax(sim_score.sum(1),1).detach().cpu().long().numpy()
+        total_vcorrects += np.sum((y_pred == y_query))  
         total_vquery += num_query
         if (val_session+1)%2000 == 0:
             tqdm.write(np.array2string(sim_score.detach().cpu().numpy()))
-            tqdm.write(np.array2string(labels[:, :num_items, 1].detach().cpu().numpy().flatten()))
+            tqdm.write("S:" + np.array2string(labels[:, :num_support, 1].detach().cpu().long().numpy().flatten()) +'\n'+
+                       "Q:" + np.array2string(y_query.flatten()) + '\n' +
+                       "P:" + np.array2string(y_pred.flatten()) )
             tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
             
         
@@ -202,35 +207,35 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
     total_query    = 0
     for session in trange(len(sessions_iter), desc='sessions', position=1):
         
-        FeatEnc.train(); RN.train()
-        
-        feats, labels, num_items, index = sessions_iter.next()
-        feats, labels = Variable(feats).cuda(GPU), Variable(labels).cuda(GPU) 
+        FeatEnc.train(); RN.train();
+        feats, logs, labels, num_items, index = sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS.
+        feats, logs, labels = Variable(feats).cuda(GPU), Variable(logs).cuda(GPU), Variable(labels).cuda(GPU) 
     
         # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...
         num_support = int(num_items/2) # 
         num_query   = int(num_items) - num_support
         
-        x_support = feats[:, :num_support, :].permute(1,0,2) # 7x1x70
-        x_query   = feats[:, num_support:num_items, :].permute(1,0,2) # 8x1*70 (batch x ch x dim)
+        x_support = feats[:, :num_support, :].permute(1,0,2) # 7x1x29
+        x_query   = feats[:, num_support:num_items, :].permute(1,0,2) # 8x1*29 (batch x ch x dim)
         
         # - feature encoder
-        x_feat_support = FeatEnc(x_support) # 7x1x256
-        x_feat_query   = FeatEnc(x_query)   # 8x1x256
-        # - concat support labels
-        x_feat_support = torch.cat((x_feat_support, labels[:, :num_support, :].view(-1,1,3)), 2) #7x1x259
+        x_feat_support = FeatEnc(x_support) # 7x1x64
+        x_feat_query   = FeatEnc(x_query)   # 8x1x64
+        # - concat support los(d=41) and labels(d=3) to feat_support. QUERY SHOULD NOT INCLUDE THESE...
+        _extras = torch.cat((logs[:, :num_support, :],labels[:, :num_support, :]), 2)      
+        x_feat_support = torch.cat((x_feat_support, _extras.view(-1,1,44)), 2) #7x1x108
         
         # - tile tensors for coding relations
-        x_feat_support_ext = x_feat_support.unsqueeze(0).repeat(num_query,1,1,1) # 8x7x1*259
-        x_feat_query_ext   = x_feat_query.unsqueeze(0).repeat(num_support,1,1,1) # 7x8x1*256
-        x_feat_query_ext = torch.transpose(x_feat_query_ext,0,1) # 8x7x1*256
+        x_feat_support_ext = x_feat_support.unsqueeze(0).repeat(num_query,1,1,1) # 8x7x1*108
+        x_feat_query_ext   = x_feat_query.unsqueeze(0).repeat(num_support,1,1,1) # 7x8x1*64
+        x_feat_query_ext = torch.transpose(x_feat_query_ext,0,1) # 8x7x1*64
         # - generate relation pairs
-        x_feat_relation_pairs = torch.cat((x_feat_support_ext, x_feat_query_ext),3) # 56x1*515
-        x_feat_relation_pairs = x_feat_relation_pairs.view(num_support*num_query, 1, -1)
+        x_feat_relation_pairs = torch.cat((x_feat_support_ext, x_feat_query_ext),3) # 8x7x1*172
+        x_feat_relation_pairs = x_feat_relation_pairs.view(num_support*num_query, 1, -1) # 56x1*172
         # - generate relation ground-truth
-        y_support_ext = labels[:, :num_support, 1].view(-1).repeat(num_query) # 1x7->1x56
+        y_support_ext = labels[:, :num_support, 1].view(-1).repeat(num_query) # [56]
         y_query_ext   = labels[:, num_support:num_items, 1].repeat(num_support,1) 
-        y_query_ext   = torch.transpose(y_query_ext,0,1).contiguous().view(-1) # 1x8->1x56
+        y_query_ext   = torch.transpose(y_query_ext,0,1).contiguous().view(-1) # [56]
         y_relation = (y_support_ext==y_query_ext).float().view(-1,1)  # 56x1
         
         # Forward Propagation
@@ -254,14 +259,18 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
         sim_score[:,0] = y_hat_relation.view(-1) * (y_support_ext == 0).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 1).float()
         sim_score[:,1] = y_hat_relation.view(-1) * (y_support_ext == 1).float() + (1 - y_hat_relation.view(-1)) * (y_support_ext == 0).float()
         sim_score = sim_score.view(num_query,-1,2) #8x7x2 (que x sup x class)
-        y_query = labels[:, num_support:num_items, 1].long().cpu() # 8
-        total_corrects += np.sum((torch.argmax(sim_score.sum(1),1).cpu() == y_query).numpy())  
+        
+        y_query = labels[:, num_support:num_items, 1].detach().cpu().long().numpy() # 8
+        y_pred  = torch.argmax(sim_score.sum(1),1).detach().cpu().long().numpy()
+        total_corrects += np.sum((y_pred == y_query)) 
         total_query += num_query
         if (session+1)%2000 == 0:
             hist_trloss.append(loss.item())
             hist_tracc.append(total_corrects/total_query)
             tqdm.write(np.array2string(sim_score.detach().cpu().numpy()))
-            tqdm.write(np.array2string(labels[:, :num_items, 1].detach().cpu().numpy().flatten()))
+            tqdm.write("S:" + np.array2string(labels[:, :num_support, 1].detach().cpu().long().numpy().flatten()) +'\n'+
+                       "Q:" + np.array2string(y_query.flatten()) + '\n' +
+                       "P:" + np.array2string(y_pred.flatten()) )
             tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(session, hist_trloss[-1], hist_tracc[-1]))
             total_corrects = 0
             total_query    = 0

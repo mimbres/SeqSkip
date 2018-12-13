@@ -16,6 +16,7 @@ from utils.matrix_math import indices_to_one_hot
 
 
 # TRSET stats: 2072002577 items within 124950714 sessions
+# TSSET stats: 518260758 items within 31251398 sessions
 
 def SpotifyDataloader(config_fpath="./config_init_dataset.json",
                       mtrain_mode=True,
@@ -58,10 +59,10 @@ class SpotifyDataset(Dataset):
         TRACK_FEAT_NPY_PATH       = config.output_data_root + "track_feat.npy"
         TR_LOG_MEMMAP_DAT_PATH    = config.output_data_root + "tr_log_memmap.dat"
         TR_SESSION_SPLIT_IDX_PATH = config.output_data_root + "tr_session_split_idx.npy"
-        TR_LOG_DATA_SHAPE = (2072002577, 23)
+        TR_LOG_DATA_SHAPE = (2072002577, 23) # Hint: How to know the shape of new data? --> open memmap.data file and divide 1D shape by 23!
         TS_LOG_MEMMAP_DAT_PATH    = config.output_data_root + "ts_log_memmap.dat"
         TS_SESSION_SPLIT_IDX_PATH = config.output_data_root + "ts_session_split_idx.npy"
-        #TS_LOG_SHAPE = (, )
+        TS_LOG_DATA_SHAPE = (518260758, 23)
         
         self.mtrain_mode           = mtrain_mode
         self.random_track_order    = random_track_order
@@ -110,23 +111,26 @@ class SpotifyDataset(Dataset):
         # date는 일단 안씀.., 
         
         # NOTE: We always keep the session length of output feature as 20, and several last items are dummys filled with 0s.
-        # DIMs: feats(dim=70) = [log_feat(dim=41), track_feat(dim=29)] 
-        feats  = np.zeros(shape=(20, 70), dtype=np.float32)
+        # DIMs: feats(dim=29) = track_feat(dim=29), logs(dim=41) = log_feat(dim=41), 
+        feats = np.zeros(shape=(20, 29), dtype=np.float32)
+        logs  = np.zeros(shape=(20, 41), dtype=np.float32)
         labels = np.zeros(shape=(20, 3), dtype=np.float32)
-        # Fill out the feature dimensions as:
+        
+        # Fill out the feats dimensions as:
+        # [0,..28] : track features 
+        feats = self.track_feat[track_ids, :]
+        # Fill out the logs dimensions as:
         # [0]       : minmax-scaled date in the range of -1 to 1
         # [1,...8] : n_seekfwd, n_seekback, skip_1,2,3, hist_sh, ct_swc, no_p, s_p, l_p, premium
         # [9,..40] : one-hot-encoded categorical labels of context_type, bh_start, bh_end 
-        # [41,..69] : track features 
-        feats[:num_items, 0]     = (session_log[:, 8] / 23) * 2 - 1
-        feats[:num_items, 1:9]   = session_log[:, [9,10,14,15,16,17,18,19]]
-        feats[:num_items, 9:15]  = indices_to_one_hot(data=session_log[:,20], nb_classes=6)
-        feats[:num_items, 15:28] = indices_to_one_hot(data=session_log[:,21], nb_classes=13)
-        feats[:num_items, 28:41] = indices_to_one_hot(data=session_log[:,22], nb_classes=13)        
-        feats[:num_items, 41:]   = self.track_feat[track_ids, :]
-        labels[:num_items, :]    = session_log[:, [11,12,13]] 
+        logs[:num_items, 0]     = (session_log[:, 8] / 23) * 2 - 1
+        logs[:num_items, 1:9]   = session_log[:, [9,10,14,15,16,17,18,19]]
+        logs[:num_items, 9:15]  = indices_to_one_hot(data=session_log[:,20], nb_classes=6)
+        logs[:num_items, 15:28] = indices_to_one_hot(data=session_log[:,21], nb_classes=13)
+        logs[:num_items, 28:41] = indices_to_one_hot(data=session_log[:,22], nb_classes=13) 
         
-        return feats, labels, num_items, index
+        labels[:num_items, :]    = session_log[:, [11,12,13]] 
+        return feats, logs, labels, num_items, index
 
 
     def __len__(self):
