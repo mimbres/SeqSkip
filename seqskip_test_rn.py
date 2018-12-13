@@ -108,8 +108,8 @@ class RelationNetwork(nn.Module):
     
 
 # Init neural net
-FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).apply(weights_init).cuda(GPU)
-RN      = RelationNetwork(input_sz=172).apply(weights_init).cuda(GPU)
+FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).cuda(GPU)
+RN      = RelationNetwork(input_sz=172).cuda(GPU)
 
 
 #%%
