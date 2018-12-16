@@ -3,3 +3,4 @@ data/*.npy
 save/*/*.pth
 _*.py
 submission/*.*
+old/*.*
