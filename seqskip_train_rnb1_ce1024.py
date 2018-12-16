@@ -197,7 +197,7 @@ def validate():
             y_mask[b,:num_query[b],:num_support[b],0] = 1
         y_mask = torch.FloatTensor(y_mask).cuda(GPU)
         
-        loss = F.cross_entropy(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
+        loss = F.binary_cross_entropy(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
         total_vloss += loss.item()
         
         decision = torch.FloatTensor(np.zeros((batch_sz, 10, 10 ,2))).detach().cpu() # bx8x7*2 (b x que x sup x class)
@@ -281,7 +281,7 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
         y_mask = torch.FloatTensor(y_mask).cuda(GPU)
         
         # Calcultate MSE loss
-        loss = F.cross_entropy(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
+        loss = F.binary_cross_entropy(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
         total_trloss += loss.item()
     
         # Update Nets
