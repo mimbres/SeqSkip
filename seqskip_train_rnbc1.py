@@ -3,6 +3,9 @@
 """
 Created on Tue Dec 11 00:45:08 2018
 
+rnbc
+
+RN with batch + classifier
 @author: mimbres
 """
 
@@ -226,11 +229,11 @@ def validate():
 
 # Main
 if args.load_continue_latest is None:
-    START_EPOCH = 0
+    START_EPOCH = 0  
     
 else:
     latest_fpath = max(glob.iglob(MODEL_SAVE_PATH + "check*.pth"),key=os.path.getctime)  
-    checkpoint = torch.load(latest_fpath)
+    checkpoint = torch.load(latest_fpath, map_location='cuda:{}'.format(GPU))
     tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['loss']))
     FeatEnc.load_state_dict(checkpoint['FE_state'])
     RN.load_state_dict(checkpoint['RN_state'])
