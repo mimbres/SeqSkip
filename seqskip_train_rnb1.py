@@ -22,7 +22,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type = str, default = "./save/exp1/")
+parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnb1/")
 parser.add_argument("-l","--load_continue_latest",type = str, default = None)
 parser.add_argument("-f","--feature_dim",type = int, default = 64)
 parser.add_argument("-r","--relation_dim",type = int, default = 8)
