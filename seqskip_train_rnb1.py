@@ -214,11 +214,12 @@ def validate():
         total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask[:,:,0,0].cpu().numpy())  
         total_vquery += np.sum(num_query)
 
-        tqdm.write(np.array2string(sim_score[0,:,:,0]))
-        tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
-                   "Q:" + np.array2string(sample_que) + '\n' +
-                   "P:" + np.array2string(sample_pred) )
-        tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
+        if (session+1)%4000 == 0:
+            tqdm.write(np.array2string(sim_score[0,:,:,0]))
+            tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
+                       "Q:" + np.array2string(sample_que) + '\n' +
+                       "P:" + np.array2string(sample_pred) )
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
             
     hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)

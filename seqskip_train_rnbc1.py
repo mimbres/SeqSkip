@@ -25,7 +25,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnb1/")
+parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnbc1/")
 parser.add_argument("-l","--load_continue_latest",type = str, default = None)
 parser.add_argument("-f","--feature_dim",type = int, default = 64)
 parser.add_argument("-r","--relation_dim",type = int, default = 8)
@@ -119,12 +119,14 @@ class RelationNetwork(nn.Module):
 
     def forward(self, x_sup, x_que, x_log_sup, y_log_que, label_sup):
         relation_pairs = self.pack_relation_pairs(x_sup, x_que, x_log_sup, y_log_que, label_sup) # bx8x7x1x172 (bx8x7x1x213) 
-        out = self.layer1(relation_pairs) #bx7x8x1*512
-        out = self.layer2(out) #bx7x8x1*256
-        out = F.relu(self.fc1(out)) # bx7x8x1*64
-        out = F.sigmoid(self.fc2(out)) # bx7x8*1
-        out = out.view(-1,10,10,1)
-        return out
+        out = self.layer1(relation_pairs) #bx8x7x1*512
+        out = self.layer2(out) #bx8x7x1*256
+        out = F.relu(self.fc1(out)) # bx8x7x1*64
+        out = F.relu(self.fc2(out)) # bx8x7*1
+        out = out.view(-1,10,10)
+        out = self.classifier(out) # bx8x1
+        out = out.view(-1,10) # bx8
+        return out 
     
     
     def pack_relation_pairs(self, x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup):
@@ -189,39 +191,36 @@ def validate():
         x_feat_sup = FeatEnc(x_sup) # 1x7x1*64     
         x_feat_que = FeatEnc(x_que) # 1x8x1*64
         
-        y_hat_relation = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8x7*1
-        
-        y_sup_ext = label_sup[:,:,1].detach().cpu().view(-1,1,10,1).repeat(1,10,1,1) # bx8x7*1
-        y_que_ext = label_que[:,:,1].view(-1,10,1,1).repeat(1,1,10,1) # bx7x8*1
-        y_relation = (y_sup_ext==y_que_ext).float().view(-1,10,10,1)  # bx8x7*1
-    
-        y_mask = np.zeros((batch_sz,10,10,1), dtype=np.float32)
+        y_hat = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8
+        y_gt  = label_que[:,:,1]
+        y_mask = np.zeros((batch_sz,10), dtype=np.float32)
         for b in np.arange(batch_sz):
-            y_mask[b,:num_query[b],:num_support[b],0] = 1
-        y_mask = torch.FloatTensor(y_mask).cuda(GPU)
-        
-        loss = F.mse_loss(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
+            y_mask[b,:num_query[b]] = 1
+        y_mask = torch.FloatTensor(y_mask).cuda(GPU)    
+
+        loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask, target=y_gt.cuda(GPU)*y_mask)
         total_vloss += loss.item()
         
-        decision = torch.FloatTensor(np.zeros((batch_sz, 10, 10 ,2))).detach().cpu() # bx8x7*2 (b x que x sup x class)
-        decision[:,:,:,0] = (y_hat_relation.detach().cpu()*(y_sup_ext==0).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==1).float()).view(-1,10,10)
-        decision[:,:,:,1] = (y_hat_relation.detach().cpu()*(y_sup_ext==1).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==0).float()).view(-1,10,10)
-        decision = decision * y_mask.detach().cpu().repeat(1,1,1,2)
-        y_pred = torch.argmax(decision.sum(2),2).numpy()
-        sim_score = (y_hat_relation.detach()*y_mask).cpu().numpy()
-        
+        # Decision
+        y_prob = (F.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
+        y_pred = ((F.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
+
+        # Prepare display
         sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
-        sample_que = label_que[0,:num_query[0],1].detach().long().numpy().flatten()
+        sample_que = label_que[0,:num_query[0],1].long().numpy().flatten()
         sample_pred = y_pred[0,:num_query[0]].flatten()
- 
-        total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask[:,:,0,0].cpu().numpy())  
+        sample_prob = y_prob[0, :num_query[0]].flatten()
+    
+        # Acc
+        total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
         total_vquery += np.sum(num_query)
 
-        tqdm.write(np.array2string(sim_score[0,:,:,0]))
-        tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
-                   "Q:" + np.array2string(sample_que) + '\n' +
-                   "P:" + np.array2string(sample_pred) )
-        tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
+        if (session+1)%2000 == 0:
+            tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
+                       "Q:" + np.array2string(sample_que) + '\n' +
+                       "P:" + np.array2string(sample_pred) + '\n'+
+                       "prob:" + np.array2string(sample_prob))
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,total_vloss/val_session, total_vcorrects/total_vquery))
             
     hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
@@ -272,19 +271,17 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
         x_feat_que = FeatEnc(x_que) # 1x8x1*64
         
         # - relation network
-        y_hat_relation = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8x7*1
+        y_hat = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8
         
         # Prepare ground-truth simlarity score and mask
-        y_sup_ext = label_sup[:,:,1].detach().cpu().view(-1,1,10,1).repeat(1,10,1,1) # bx8x7*1
-        y_que_ext = label_que[:,:,1].view(-1,10,1,1).repeat(1,1,10,1) # bx7x8*1
-        y_relation = (y_sup_ext==y_que_ext).float().view(-1,10,10,1)  # bx8x7*1
-        y_mask = np.zeros((batch_sz,10,10,1), dtype=np.float32)
+        y_gt  = label_que[:,:,1]
+        y_mask = np.zeros((batch_sz,10), dtype=np.float32)
         for b in np.arange(batch_sz):
-            y_mask[b,:num_query[b],:num_support[b],0] = 1
-        y_mask = torch.FloatTensor(y_mask).cuda(GPU)
+            y_mask[b,:num_query[b]] = 1
+        y_mask = torch.FloatTensor(y_mask).cuda(GPU)    
         
-        # Calcultate MSE loss
-        loss = F.mse_loss(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
+        # Calcultate BCE loss
+        loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask, target=y_gt.cuda(GPU)*y_mask)
         total_trloss += loss.item()
     
         # Update Nets
@@ -299,29 +296,27 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
         RN_optim.step()
         
         # Decision
-        decision = torch.FloatTensor(np.zeros((batch_sz, 10, 10 ,2))).detach().cpu() # bx8x7*2 (b x que x sup x class)
-        decision[:,:,:,0] = (y_hat_relation.detach().cpu()*(y_sup_ext==0).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==1).float()).view(-1,10,10)
-        decision[:,:,:,1] = (y_hat_relation.detach().cpu()*(y_sup_ext==1).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==0).float()).view(-1,10,10)
-        decision = decision * y_mask.detach().cpu().repeat(1,1,1,2)
-        y_pred = torch.argmax(decision.sum(2),2).numpy()
-        sim_score = (y_hat_relation.detach()*y_mask).cpu().numpy()
-        
+        y_prob = (F.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
+        y_pred = ((F.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
+
         # Prepare display
         sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
-        sample_que = label_que[0,:num_query[0],1].detach().long().numpy().flatten()
+        sample_que = label_que[0,:num_query[0],1].long().numpy().flatten()
         sample_pred = y_pred[0,:num_query[0]].flatten()
- 
+        sample_prob = y_prob[0, :num_query[0]].flatten()
+    
         # Acc
-        total_corrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask[:,:,0,0].cpu().numpy())  
+        total_corrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
         total_query += np.sum(num_query)
 
         if (session+1)%5000 == 0:
             hist_trloss.append(total_trloss/5000)
             hist_tracc.append(total_corrects/total_query)
-            tqdm.write(np.array2string(sim_score[0,:,:,0]))
             tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                        "Q:" + np.array2string(sample_que) + '\n' +
-                       "P:" + np.array2string(sample_pred) )
+                       "P:" + np.array2string(sample_pred) + '\n'+
+                       "prob:" + np.array2string(sample_prob))
+            
             tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(session, hist_trloss[-1], hist_tracc[-1]))
             total_corrects = 0
             total_query    = 0
