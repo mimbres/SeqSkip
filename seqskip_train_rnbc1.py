@@ -66,7 +66,7 @@ mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=True, # True, because we use part of trainset as testset
                                   data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
                                   batch_size=2048,
-                                  shuffle=True) 
+                                  shuffle=False) 
 
 
 
