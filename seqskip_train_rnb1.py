@@ -334,5 +334,5 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0, ascii=True):
                         'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
             'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
          
-            
+        del loss, x_feat_sup, x_feat_que, y_hat_relation     
 

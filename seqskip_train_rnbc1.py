@@ -215,7 +215,9 @@ def validate():
                        "P:" + np.array2string(sample_pred) + '\n'+
                        "prob:" + np.array2string(sample_prob))
             tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,total_vloss/val_session, total_vcorrects/total_vquery))
-            
+        # Restore GPU memory
+        del loss, y_hat
+        
     hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
     
@@ -303,6 +305,9 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0, ascii=True):
         total_corrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
         total_query += np.sum(num_query)
 
+        # Restore GPU memory
+        del loss, x_feat_sup, x_feat_que, y_hat 
+
         if (session+1)%5000 == 0:
             hist_trloss.append(total_trloss/5000)
             hist_tracc.append(total_corrects/total_query)
@@ -321,9 +326,10 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0, ascii=True):
             # Validation
             validate()
             # Save
-            torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': loss, 'hist_vacc': hist_vacc,
+            torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
                         'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
             'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
-         
+        
+        
             
 
