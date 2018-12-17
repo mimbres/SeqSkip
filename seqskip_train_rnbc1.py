@@ -27,11 +27,8 @@ parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
 parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnbc1/")
 parser.add_argument("-l","--load_continue_latest",type = str, default = None)
-parser.add_argument("-f","--feature_dim",type = int, default = 64)
-parser.add_argument("-r","--relation_dim",type = int, default = 8)
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-e","--epochs",type = int, default= 1000)
-parser.add_argument("-t","--test_episode", type = int, default = 1000)
 parser.add_argument("-lr","--learning_rate", type = float, default = 0.001)
 parser.add_argument("-b","--train_batch_size", type = int, default = 1024)
 parser.add_argument("-g","--gpu",type=int, default=0)
@@ -40,11 +37,8 @@ args = parser.parse_args()
 
 
 # Hyper Parameters
-FEATURE_DIM = args.feature_dim
-RELATION_DIM = args.relation_dim
 CLASS_NUM = args.class_num
 EPOCHS = args.epochs
-TEST_EPISODE = args.test_episode
 LEARNING_RATE = args.learning_rate
 TR_BATCH_SZ = args.train_batch_size
 GPU = args.gpu
@@ -65,7 +59,7 @@ mtrain_loader = SpotifyDataloader(config_fpath=args.config,
 mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=True, # True, because we use part of trainset as testset
                                   data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
-                                  batch_size=2048,
+                                  batch_size=4096,
                                   shuffle=False) 
 
 
@@ -215,7 +209,7 @@ def validate():
         total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
         total_vquery += np.sum(num_query)
 
-        if (session+1)%2000 == 0:
+        if (val_session+1)%2000 == 0:
             tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                        "Q:" + np.array2string(sample_que) + '\n' +
                        "P:" + np.array2string(sample_pred) + '\n'+

@@ -1,7 +1,7 @@
 data/*.dat
 data/*.npy
-save/*/*.pth
-save/*.pth
+save/*/*.*
+save/*.*
 _*.py
 submission/*.*
 old/*.*

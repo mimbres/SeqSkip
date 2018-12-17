@@ -29,7 +29,7 @@ parser.add_argument("-r","--relation_dim",type = int, default = 8)
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-e","--epochs",type = int, default= 1000)
 parser.add_argument("-t","--test_episode", type = int, default = 1000)
-parser.add_argument("-lr","--learning_rate", type = float, default = 0.004)
+parser.add_argument("-lr","--learning_rate", type = float, default = 0.001)
 parser.add_argument("-b","--train_batch_size", type = int, default = 1024)
 parser.add_argument("-g","--gpu",type=int, default=0)
 #parser.add_argument("-e","--embed_hidden_unit",type=int, default=2)
@@ -214,7 +214,7 @@ def validate():
         total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask[:,:,0,0].cpu().numpy())  
         total_vquery += np.sum(num_query)
 
-        if (session+1)%4000 == 0:
+        if (val_session+1)%4000 == 0:
             tqdm.write(np.array2string(sim_score[0,:,:,0]))
             tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                        "Q:" + np.array2string(sample_que) + '\n' +
