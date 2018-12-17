@@ -32,7 +32,7 @@ parser.add_argument("-r","--relation_dim",type = int, default = 8)
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-e","--epochs",type = int, default= 1000)
 parser.add_argument("-t","--test_episode", type = int, default = 1000)
-parser.add_argument("-lr","--learning_rate", type = float, default = 0.004)
+parser.add_argument("-lr","--learning_rate", type = float, default = 0.001)
 parser.add_argument("-b","--train_batch_size", type = int, default = 1024)
 parser.add_argument("-g","--gpu",type=int, default=0)
 #parser.add_argument("-e","--embed_hidden_unit",type=int, default=2)
@@ -122,7 +122,7 @@ class RelationNetwork(nn.Module):
         out = self.layer1(relation_pairs) #bx8x7x1*512
         out = self.layer2(out) #bx8x7x1*256
         out = F.relu(self.fc1(out)) # bx8x7x1*64
-        out = F.sigmoid(self.fc2(out)) # bx8x7*1
+        out = F.relu(self.fc2(out)) # bx8x7*1
         out = out.view(-1,10,10)
         out = self.classifier(out) # bx8x1
         out = out.view(-1,10) # bx8

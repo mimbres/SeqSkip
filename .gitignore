@@ -5,3 +5,4 @@ save/*.pth
 _*.py
 submission/*.*
 old/*.*
+summary/*.*
