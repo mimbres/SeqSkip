@@ -59,9 +59,9 @@ def main():
     RN      = m.RelationNetwork().cuda(GPU)
     
     # Load checkpoint
-    checkpoint = torch.load(CHECKPOINT_PATH)
-    tqdm.write("Loading checkpoint from '{0:}'... epoch:{1:} loss:{2:.6f}".format(CHECKPOINT_PATH, 
-               checkpoint['ep'], checkpoint['loss']))
+    checkpoint = torch.load(CHECKPOINT_PATH, map_location='cuda:{}'.format(GPU))
+    tqdm.write("Loading checkpoint from '{0:}'... epoch:{1:} vacc:{2:.6f}".format(CHECKPOINT_PATH, 
+               checkpoint['ep'], checkpoint['hist_vacc'][-1]))
     FeatEnc.load_state_dict(checkpoint['FE_state'])
     RN.load_state_dict(checkpoint['RN_state'])
 
