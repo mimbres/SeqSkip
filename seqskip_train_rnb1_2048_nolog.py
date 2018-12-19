@@ -29,7 +29,7 @@ parser.add_argument("-r","--relation_dim",type = int, default = 8)
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-e","--epochs",type = int, default= 1000)
 parser.add_argument("-t","--test_episode", type = int, default = 1000)
-parser.add_argument("-lr","--learning_rate", type = float, default = 0.004)
+parser.add_argument("-lr","--learning_rate", type = float, default = 0.001)
 parser.add_argument("-b","--train_batch_size", type = int, default = 2048)
 parser.add_argument("-g","--gpu",type=int, default=0)
 #parser.add_argument("-e","--embed_hidden_unit",type=int, default=2)
@@ -55,13 +55,14 @@ os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
 print('Initializing dataloader...')
 mtrain_loader = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=True,
-                                  data_sel=(0, 99965071), # 80% 트레인
+                                  #data_sel=(0, 99965071), # 80% 트레인
+                                  data_sel=(0, 9965071),
                                   batch_size=TR_BATCH_SZ,
                                   shuffle=True) # shuffle은 True로 해야됨 나중에... 
 
 mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=True, # True, because we use part of trainset as testset
-                                  data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
+                                  data_sel=(39965071, 124950714),#(99965071, 124950714), # 20%를 테스트
                                   batch_size=2048,
                                   shuffle=True) 
 
@@ -216,13 +217,16 @@ def validate():
         total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask[:,:,0,0].cpu().numpy())  
         total_vquery += np.sum(num_query)
         
-        if (val_session+1)%4000 == 0:
+        if (val_session+1)%500 == 0:
             tqdm.write(np.array2string(sim_score[0,:,:,0]))
             tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                        "Q:" + np.array2string(sample_que) + '\n' +
                        "P:" + np.array2string(sample_pred) )
             tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
-           
+        
+        if val_session>5000:
+            continue
+            
     hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
     

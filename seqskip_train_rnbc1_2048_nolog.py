@@ -30,7 +30,7 @@ parser.add_argument("-l","--load_continue_latest",type = str, default = None)
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-e","--epochs",type = int, default= 1000)
 parser.add_argument("-lr","--learning_rate", type = float, default = 0.001)
-parser.add_argument("-b","--train_batch_size", type = int, default = 2048)
+parser.add_argument("-b","--train_batch_size", type = int, default = 1024)
 parser.add_argument("-g","--gpu",type=int, default=0)
 #parser.add_argument("-e","--embed_hidden_unit",type=int, default=2)
 args = parser.parse_args()
@@ -210,13 +210,15 @@ def main():
     print('Initializing dataloader...')
     mtrain_loader = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True,
-                                      data_sel=(0, 99965071), # 80% 트레인
+                                      #data_sel=(0, 99965071), # 80% 트레인
+                                      data_sel=(0,79972056),
                                       batch_size=TR_BATCH_SZ,
                                       shuffle=True) # shuffle은 True로 해야됨 나중에... 
     
     mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True, # True, because we use part of trainset as testset
-                                      data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
+                                      #data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
+                                      data_sel=(114950714, 124950714),
                                       batch_size=4096,
                                       shuffle=False) 
     
@@ -332,6 +334,10 @@ def main():
                 total_query    = 0
                 total_trloss   = 0
                 
+                # Validation
+                validate(mval_loader, FeatEnc, RN, submission_mode=False)
+             
+            
             
 
         # Validation
