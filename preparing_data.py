@@ -157,7 +157,7 @@ def init_tsdataset(dict_track_id, config_fpath=config_fpath):
     dtmm_old_shape = (0,0)
     index_start_from = 0 # keep the last number of items in user-log-data
     
-    for file_count, fpath_sup in enumerate(tqdm(glob.glob(os.path.join(TS_LOG_DATA_ROOT, "log_prehistory*.csv")))):
+    for file_count, fpath_sup in enumerate(tqdm(sorted(glob.glob(os.path.join(TS_LOG_DATA_ROOT, "log_prehistory*.csv"))))):
         fpath_que = fpath_sup.replace("prehistory", "input")
         assert os.path.isfile(fpath_que), "Error! File '{}' does not exist.".format(fpath_que)
         tqdm.write("TSDATA: Collecting data from:\n" + fpath_sup + "\n" + fpath_que)
@@ -191,7 +191,7 @@ def init_tsdataset(dict_track_id, config_fpath=config_fpath):
             # [20,..22]       | context, bh_start, bh_end                       | uint8  
             _s_sel = range(_s_sess_head_idx[i], _s_sess_tail_idx[i])
             _q_sel = range(_q_sess_head_idx[i], _q_sess_tail_idx[i])
-            _dt_sel = range(_dt_sess_head_idx[i], _dt_sess_tail_idx[i])
+            #_dt_sel = range(_dt_sess_head_idx[i], _dt_sess_tail_idx[i])
             _dt_s_sel = range(_dt_sess_head_idx[i], _dt_sess_head_idx[i] + len(_s_sel)) # head of session : df_splt : tail of session  
             _dt_q_sel = range(_dt_sess_head_idx[i] + len(_s_sel), _dt_sess_tail_idx[i])
             
