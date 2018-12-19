@@ -20,6 +20,7 @@ import glob, os
 import argparse
 from tqdm import trange, tqdm 
 from spotify_data_loader import SpotifyDataloader
+from utils.eval import evaluate
 cudnn.benchmark = True
 
 
@@ -140,6 +141,7 @@ class RelationNetwork(nn.Module):
 def validate(mval_loader, FeatEnc, RN, submission_mode):
     tqdm.write("Validation...")
     submit = []
+    gt     = []
     total_vloss    = 0
     total_vcorrects = 0
     total_vquery    = 0
@@ -176,9 +178,11 @@ def validate(mval_loader, FeatEnc, RN, submission_mode):
         # Decision
         y_prob = (torch.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
         y_pred = ((torch.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
-        if submission_mode is True:
-            for b in np.arange(batch_sz):
-                submit.append(y_pred[b,:num_query[b]].flatten())
+        _y_gt  = y_gt.detach().cpu().numpy()
+
+        for b in np.arange(batch_sz):
+            submit.append(y_pred[b,:num_query[b]].flatten())
+            gt.append(_y_gt[b,:num_query[b]].flatten())
 
         # Prepare display
         sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
@@ -188,19 +192,24 @@ def validate(mval_loader, FeatEnc, RN, submission_mode):
     
         # Acc
         total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
-        total_vquery += np.sum(num_query)
-
+        total_vquery += np.sum(num_query)        
+        
         if (val_session+1)%2000 == 0:
             tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                        "Q:" + np.array2string(sample_que) + '\n' +
                        "P:" + np.array2string(sample_pred) + '\n'+
                        "prob:" + np.array2string(sample_prob))
-            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,total_vloss/val_session, total_vcorrects/total_vquery))
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,total_vloss/val_session, total_vcorrects/total_vquery)) 
+        
         # Restore GPU memory
         del loss, y_hat
         
     hist_vloss.append(total_vloss/(val_session+1))
     hist_vacc.append(total_vcorrects/total_vquery)
+    
+    # Avg.Acc
+    aacc = evaluate(submit, gt)
+    tqdm.write("AACC={0:.6f}, FirstAcc={1:.6f}".format(aacc[0], aacc[1]))
     return submit
     
 
@@ -211,15 +220,15 @@ def main():
     mtrain_loader = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True,
                                       #data_sel=(0, 99965071), # 80% 트레인
-                                      data_sel=(0,79972056),
+                                      data_sel=(0,8072056),
                                       batch_size=TR_BATCH_SZ,
                                       shuffle=True) # shuffle은 True로 해야됨 나중에... 
     
     mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True, # True, because we use part of trainset as testset
                                       #data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
-                                      data_sel=(114950714, 124950714),
-                                      batch_size=4096,
+                                      data_sel=(114950714, 115050714),
+                                      batch_size=1024,
                                       shuffle=False) 
     
     # Init neural net
@@ -321,7 +330,7 @@ def main():
             # Restore GPU memory
             del loss, x_feat_sup, x_feat_que, y_hat 
     
-            if (session+1)%5000 == 0:
+            if (session+1)%1000 == 0:
                 hist_trloss.append(total_trloss/5000)
                 hist_tracc.append(total_corrects/total_query)
                 tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
@@ -336,7 +345,7 @@ def main():
                 
                 # Validation
                 validate(mval_loader, FeatEnc, RN, submission_mode=False)
-             
+                
             
             
 
