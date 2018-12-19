@@ -197,7 +197,7 @@ def validate(mval_loader, FeatEnc, RN, submission_mode):
         # Restore GPU memory
         del loss, y_hat
         
-    hist_vloss.append(total_vloss/val_session)
+    hist_vloss.append(total_vloss/(val_session+1))
     hist_vacc.append(total_vcorrects/total_vquery)
     return submit
     

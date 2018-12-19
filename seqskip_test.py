@@ -33,7 +33,7 @@ SUBMISSION_OUTPUT_PATH = os.path.dirname(CHECKPOINT_PATH)
 print('Initializing dataloader...')
 mtest_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=False, # False = testset for submission
-                                  data_sel=(0, 100),
+                                  #data_sel=(0, 100),
                                   batch_size=8192,
                                   shuffle=False) 
 
