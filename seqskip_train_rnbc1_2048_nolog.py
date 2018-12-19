@@ -25,7 +25,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnbc1_2048_nolog/")
+parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnbc1_2048/")
 parser.add_argument("-l","--load_continue_latest",type = str, default = None)
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-e","--epochs",type = int, default= 1000)
@@ -76,7 +76,7 @@ class RelationNetwork(nn.Module):
                  num_sup_max=10, num_que_max=10,
                  in_feat_sup_sz=64, in_feat_que_sz=64, 
                  in_log_sup_sz=0, in_log_que_sz=0,
-                 in_label_sup_sz=3): # 64,64,0,0,3
+                 in_label_sup_sz=3): # 64,64,41,0,3
         super(RelationNetwork, self).__init__()
         self.num_sup_max = num_sup_max
         self.num_que_max = num_que_max
@@ -103,9 +103,7 @@ class RelationNetwork(nn.Module):
         self.classifier = nn.Linear(10,1)
 
     def forward(self, x_sup, x_que, x_log_sup, y_log_que, label_sup):
-        #relation_pairs = self.pack_relation_pairs(x_sup, x_que, x_log_sup, y_log_que, label_sup) # bx8x7x1x172 (bx8x7x1x213) 
-        _ = torch.FloatTensor([])
-        relation_pairs = self.pack_relation_pairs(x_sup, x_que, _, y_log_que, label_sup)
+        relation_pairs = self.pack_relation_pairs(x_sup, x_que, x_log_sup, y_log_que, label_sup) # bx8x7x1x172 (bx8x7x1x213) 
         out = self.layer1(relation_pairs) #bx8x7x1*512
         out = self.layer2(out) #bx8x7x1*256
         out = F.relu(self.fc1(out)) # bx8x7x1*64
@@ -119,19 +117,19 @@ class RelationNetwork(nn.Module):
     def pack_relation_pairs(self, x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup):
         # x_feat_sup: bx7x1*64, x_feat_que: bx8x1*64
         # _extras: concat support logs(d=41) and labels(d=3) to feat_support. QUERY SHOULD NOT INCLUDE THESE...
-        _extras_sup = torch.cat((x_log_sup, label_sup), 2).unsqueeze(2) # bx7x1*3  
-        x_feat_sup = torch.cat((x_feat_sup, _extras_sup), 3) # bx7x1*67
-        x_feat_sup_ext = x_feat_sup.unsqueeze(1).repeat(1,10,1,1,1) # bx8x7x1*67
+        _extras_sup = torch.cat((x_log_sup, label_sup), 2).unsqueeze(2) # bx7x1*44  
+        x_feat_sup = torch.cat((x_feat_sup, _extras_sup), 3) # bx7x1*108
+        x_feat_sup_ext = x_feat_sup.unsqueeze(1).repeat(1,10,1,1,1) # bx8x7x1*108
         
         if self.in_log_que_sz is not 0: # As default, we don't use x_log_que
             _extras_que = x_log_que.unsqueeze(2) # (bx8x1*41)
             x_feat_que = torch.cat((x_feat_que, _extras_que), 3) # (bx8x1*108)
         
-        x_feat_que_ext = x_feat_que.unsqueeze(2).repeat(1,1,10,1,1) 
+        x_feat_que_ext = x_feat_que.unsqueeze(2).repeat(1,1,10,1,1)
         #x_feat_que_ext = x_feat_que.unsqueeze(1).repeat(1,10,1,1,1) # bx7x8x1*64 (bx7x8x1*105)
         #x_feat_que_ext = torch.transpose(x_feat_que_ext,1,2) # bx8x7x1*64 (bx8x7x1*105)
         
-        x_relation_pairs = torch.cat((x_feat_sup_ext, x_feat_que_ext), 4) # bx8x7x1*131 (bx8x7x1*213)
+        x_relation_pairs = torch.cat((x_feat_sup_ext, x_feat_que_ext), 4) # bx8x7x1*172 (bx8x7x1*213)
         return x_relation_pairs
     
 
@@ -151,7 +149,9 @@ def validate(mval_loader, FeatEnc, RN, submission_mode):
         FeatEnc.eval(); RN.eval();        
         x_sup, x_que, x_log_sup, x_log_que, label_sup, label_que, num_items, index = val_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
         x_sup, x_que = Variable(x_sup).cuda(GPU), Variable(x_que).cuda(GPU)
-        x_log_sup, x_log_que   = Variable(x_log_sup).cuda(GPU), Variable(x_log_que).cuda(GPU)
+        #x_log_sup, x_log_que   = Variable(x_log_sup).cuda(GPU), Variable(x_log_que).cuda(GPU)
+        x_log_sup = Variable(torch.FloatTensor([])).cuda(GPU)
+        x_log_que = Variable(torch.FloatTensor([])).cuda(GPU)
         label_sup = Variable(label_sup).cuda(GPU)
                 
         num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
@@ -260,7 +260,9 @@ def main():
             FeatEnc.train(); RN.train();
             x_sup, x_que, x_log_sup, x_log_que, label_sup, label_que, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
             x_sup, x_que = Variable(x_sup).cuda(GPU), Variable(x_que).cuda(GPU)
-            x_log_sup, x_log_que   = Variable(x_log_sup).cuda(GPU), Variable(x_log_que).cuda(GPU)
+            #x_log_sup, x_log_que   = Variable(x_log_sup).cuda(GPU), Variable(x_log_que).cuda(GPU)
+            x_log_sup = Variable(torch.FloatTensor([])).cuda(GPU)
+            x_log_que = Variable(torch.FloatTensor([])).cuda(GPU)
             label_sup = Variable(label_sup).cuda(GPU)
             
             # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
