@@ -236,7 +236,7 @@ def main():
     else:
         latest_fpath = max(glob.iglob(MODEL_SAVE_PATH + "check*.pth"),key=os.path.getctime)  
         checkpoint = torch.load(latest_fpath, map_location='cuda:{}'.format(GPU))
-        tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['loss']))
+        tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['hist_trloss'][-1]))
         FeatEnc.load_state_dict(checkpoint['FE_state'])
         RN.load_state_dict(checkpoint['RN_state'])
         FeatEnc_optim.load_state_dict(checkpoint['FE_opt_state'])
@@ -329,14 +329,14 @@ def main():
                 total_trloss   = 0
                 
             
-            if (session+1)%40000 == 0:
-                # Validation
-                validate(mval_loader, FeatEnc, RN, submission_mode=False)
-                # Save
-                torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
-                            'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
-                'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
-            
+
+        # Validation
+        validate(mval_loader, FeatEnc, RN, submission_mode=False)
+        # Save
+        torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
+                    'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
+        'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
+    
 if __name__ == '__main__':
     main()
             

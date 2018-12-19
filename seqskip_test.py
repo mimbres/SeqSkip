@@ -7,19 +7,20 @@ Created on Thu Dec 13 04:24:24 2018
 """
 import torch
 #import numpy as np
-import os, time
+import os, time, sys
 import argparse
 from tqdm import tqdm 
 from spotify_data_loader import SpotifyDataloader
-from importlib import import_module
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
-parser.add_argument("-m","--model_py", type = str, required=False, default="./seqskip_train_rnbc1_2048.py")
-parser.add_argument("-s","--save_path",type = str, required=False, default="./save/exp_rnbc1_2048/check_4_39999.pth") # directory of saved checkpoint
+parser.add_argument("-m","--model_py", type = str, default="./seqskip_train_rnbc1_2048.py")
+parser.add_argument("-s","--save_path",type = str, default="./save/exp_rnbc1_2048/check_6_39999.pth") # directory of saved checkpoint
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-g","--gpu",type=int, default=0)
 args = parser.parse_args()
+
+sys.argv = [sys.argv[0]]
 
 GPU = args.gpu
 # Module (path of train code including validate() and model) 
@@ -40,7 +41,7 @@ mtest_loader  = SpotifyDataloader(config_fpath=args.config,
 #mtest_loader  = SpotifyDataloader(config_fpath=args.config,
 #                                  mtrain_mode=True, # True, because we use part of trainset as testset
 #                                  data_sel=(99965071, 110075071),#(99965071, 124950714), # 20%를 테스트
-#                                  batch_size=1,
+#                                  batch_size=10,
 #                                  shuffle=True) 
 
 def save_submission(output, output_path):
@@ -53,11 +54,16 @@ def save_submission(output, output_path):
 #%% Main
 def main():
     # Import module --> load model
-    module_name = os.path.splitext(os.path.split(MODEL_PATH)[1])[0]
-    m = import_module(module_name)
-    FeatEnc = m.MLP(input_sz=29, hidden_sz=512, output_sz=64).cuda(GPU)
-    RN      = m.RelationNetwork().cuda(GPU)
+    m = os.path.splitext(os.path.split(MODEL_PATH)[1])[0]
     
+    MLP             = getattr(__import__(m, fromlist='MLP'), 'MLP')
+    RelationNetwork = getattr(__import__(m, fromlist='RelationNetwork'), 'RelationNetwork')
+    validate        = getattr(__import__(m, fromlist='validate'), 'validate')
+    
+    FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).cuda(GPU)
+    RN      = RelationNetwork().cuda(GPU)
+    print(CHECKPOINT_PATH)
+    print(MODEL_PATH)
     # Load checkpoint
     checkpoint = torch.load(CHECKPOINT_PATH, map_location='cuda:{}'.format(GPU))
     tqdm.write("Loading checkpoint from '{0:}'... epoch:{1:} vacc:{2:.6f}".format(CHECKPOINT_PATH, 
@@ -66,7 +72,7 @@ def main():
     RN.load_state_dict(checkpoint['RN_state'])
 
     # Test
-    submission = m.validate(mtest_loader, FeatEnc, RN, submission_mode=True)
+    submission = validate(mtest_loader, FeatEnc, RN, submission_mode=True)
     if len(submission)!=31251398: print("WARNING: submission size not matches.");
 
     # Save

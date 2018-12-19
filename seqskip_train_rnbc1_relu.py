@@ -105,7 +105,7 @@ class RelationNetwork(nn.Module):
         out = self.layer1(relation_pairs) #bx8x7x1*512
         out = self.layer2(out) #bx8x7x1*256
         out = F.relu(self.fc1(out)) # bx8x7x1*64
-        out = torch.sigmoid(self.fc2(out)) # bx8x7*1
+        out = F.relu(self.fc2(out)) # bx8x7*1  # sigmoid?
         out = out.view(-1,10,10)
         out = self.classifier(out) # bx8x1
         out = out.view(-1,10) # bx8
