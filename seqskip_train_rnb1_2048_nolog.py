@@ -324,7 +324,7 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0,ascii=True):
         # Restore GPU memory
         del loss, x_feat_sup, x_feat_que, y_hat_relation 
         
-        if (session+1)%5000 == 0:
+        if (session+1)%2000 == 0:
             hist_trloss.append(total_trloss/5000)
             hist_tracc.append(total_corrects/total_query)
             tqdm.write(np.array2string(sim_score[0,:,:,0]))
@@ -337,13 +337,13 @@ for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0,ascii=True):
             total_trloss   = 0
             
         
-        if (session+1)%40000 == 0:
-            # Validation
-            validate()
-            # Save
-            torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
-                        'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
-            'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
+        #if (session+1)%40000 == 0:
+    # Validation
+    validate()
+    # Save
+    torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
+                'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
+    'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
          
             
 

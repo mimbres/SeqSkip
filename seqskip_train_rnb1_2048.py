@@ -170,7 +170,7 @@ def validate():
     total_vquery    = 0
     val_sessions_iter = iter(mval_loader)
     
-    for val_session in trange(len(val_sessions_iter), desc='val-sessions', position=2):
+    for val_session in trange(len(val_sessions_iter), desc='val-sessions', position=2,ascii=True):
         FeatEnc.eval(); RN.eval();        
         x_sup, x_que, x_log_sup, x_log_que, label_sup, label_que, num_items, index = val_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
         x_sup, x_que = Variable(x_sup).cuda(GPU), Variable(x_que).cuda(GPU)
@@ -242,14 +242,14 @@ else:
     START_EPOCH = checkpoint['ep']
     
     
-for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0):
+for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0,ascii=True):
     
     tqdm.write('Train...')
     tr_sessions_iter = iter(mtrain_loader)
     total_corrects = 0
     total_query    = 0
     total_trloss   = 0
-    for session in trange(len(tr_sessions_iter), desc='sessions', position=1):
+    for session in trange(len(tr_sessions_iter), desc='sessions', position=1,ascii=True):
         
         FeatEnc.train(); RN.train();
         x_sup, x_que, x_log_sup, x_log_que, label_sup, label_que, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS

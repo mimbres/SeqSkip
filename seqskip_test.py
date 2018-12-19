@@ -30,7 +30,7 @@ CHECKPOINT_PATH = args.save_path
 # Submission output
 SUBMISSION_OUTPUT_PATH = os.path.dirname(CHECKPOINT_PATH)
 
-# TSSET stats: 518260758 items within 31251398 sessions
+# TSSET stats: 518275860 items within 31251398 sessions
 print('Initializing dataloader...')
 mtest_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=False, # False = testset for submission
@@ -51,6 +51,7 @@ def save_submission(output, output_path):
             line = ''.join(map(str,l))
             f.write(line + '\n')
     tqdm.write('submission saved to {}'.format(output_path))
+    return
 #%% Main
 def main():
     # Import module --> load model
