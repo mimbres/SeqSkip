@@ -47,21 +47,12 @@ GPU = args.gpu
 MODEL_SAVE_PATH = args.save_path
 os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
 
-
-# Trainset stats: 2072002577 items from 124950714 sessions
-print('Initializing dataloader...')
-mtrain_loader = SpotifyDataloader(config_fpath=args.config,
-                                  mtrain_mode=True,
-                                  data_sel=(0, 99965071), # 80% 트레인
-                                  batch_size=TR_BATCH_SZ,
-                                  shuffle=True) # shuffle은 True로 해야됨 나중에... 
-
-mval_loader  = SpotifyDataloader(config_fpath=args.config,
-                                  mtrain_mode=True, # True, because we use part of trainset as testset
-                                  data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
-                                  batch_size=4096,
-                                  shuffle=False) 
-
+# Global history variables
+hist_trloss = list()
+hist_tracc  = list()
+hist_vloss  = list()
+hist_vacc   = list()
+np.set_printoptions(precision=3)
 
 
 #Feature encoder:
@@ -141,29 +132,14 @@ class RelationNetwork(nn.Module):
         x_relation_pairs = torch.cat((x_feat_sup_ext, x_feat_que_ext), 4) # bx8x7x1*172 (bx8x7x1*213)
         return x_relation_pairs
     
-        
-        
-# Init neural net
-#FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).apply(weights_init).cuda(GPU)
-FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).cuda(GPU)
-RN      = RelationNetwork().cuda(GPU)
 
-FeatEnc_optim = torch.optim.Adam(FeatEnc.parameters(), lr=LEARNING_RATE)
-RN_optim      = torch.optim.Adam(RN.parameters(), lr=LEARNING_RATE)
 
-FeatEnc_scheduler = StepLR(FeatEnc_optim, step_size=100000, gamma=0.2)
-RN_scheduler = StepLR(RN_optim, step_size=100000, gamma=0.2) 
- 
-#relation_net_optim#
+
+    
 #%%
-hist_trloss = list()
-hist_tracc  = list()
-hist_vloss  = list()
-hist_vacc   = list()
-np.set_printoptions(precision=3)
-
-def validate():
+def validate(mval_loader, FeatEnc, RN, submission_mode):
     tqdm.write("Validation...")
+    submit = []
     total_vloss    = 0
     total_vcorrects = 0
     total_vquery    = 0
@@ -198,6 +174,9 @@ def validate():
         # Decision
         y_prob = (torch.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
         y_pred = ((torch.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
+        if submission_mode is True:
+            for b in np.arange(batch_sz):
+                submit.append(y_pred[b,:num_query[b]].flatten())
 
         # Prepare display
         sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
@@ -220,116 +199,145 @@ def validate():
         
     hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
+    return submit
     
 
 # Main
-if args.load_continue_latest is None:
-    START_EPOCH = 0  
+def main():
+    # Trainset stats: 2072002577 items from 124950714 sessions
+    print('Initializing dataloader...')
+    mtrain_loader = SpotifyDataloader(config_fpath=args.config,
+                                      mtrain_mode=True,
+                                      data_sel=(0, 99965071), # 80% 트레인
+                                      batch_size=TR_BATCH_SZ,
+                                      shuffle=True) # shuffle은 True로 해야됨 나중에... 
     
-else:
-    latest_fpath = max(glob.iglob(MODEL_SAVE_PATH + "check*.pth"),key=os.path.getctime)  
-    checkpoint = torch.load(latest_fpath, map_location='cuda:{}'.format(GPU))
-    tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['loss']))
-    FeatEnc.load_state_dict(checkpoint['FE_state'])
-    RN.load_state_dict(checkpoint['RN_state'])
-    FeatEnc_optim.load_state_dict(checkpoint['FE_opt_state'])
-    RN_optim.load_state_dict(checkpoint['RN_opt_state'])
-    FeatEnc_scheduler.load_state_dict(checkpoint['FE_sch_state'])
-    RN_scheduler.load_state_dict(checkpoint['RN_sch_state'])
-    START_EPOCH = checkpoint['ep']
+    mval_loader  = SpotifyDataloader(config_fpath=args.config,
+                                      mtrain_mode=True, # True, because we use part of trainset as testset
+                                      data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
+                                      batch_size=4096,
+                                      shuffle=False) 
     
+    # Init neural net
+    #FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).apply(weights_init).cuda(GPU)
+    FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).cuda(GPU)
+    RN      = RelationNetwork().cuda(GPU)
     
-for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0, ascii=True):
+    FeatEnc_optim = torch.optim.Adam(FeatEnc.parameters(), lr=LEARNING_RATE)
+    RN_optim      = torch.optim.Adam(RN.parameters(), lr=LEARNING_RATE)
     
-    tqdm.write('Train...')
-    tr_sessions_iter = iter(mtrain_loader)
-    total_corrects = 0
-    total_query    = 0
-    total_trloss   = 0
-    for session in trange(len(tr_sessions_iter), desc='sessions', position=1, ascii=True):
+    FeatEnc_scheduler = StepLR(FeatEnc_optim, step_size=100000, gamma=0.2)
+    RN_scheduler = StepLR(RN_optim, step_size=100000, gamma=0.2) 
         
-        FeatEnc.train(); RN.train();
-        x_sup, x_que, x_log_sup, x_log_que, label_sup, label_que, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
-        x_sup, x_que = Variable(x_sup).cuda(GPU), Variable(x_que).cuda(GPU)
-        x_log_sup, x_log_que   = Variable(x_log_sup).cuda(GPU), Variable(x_log_que).cuda(GPU)
-        label_sup = Variable(label_sup).cuda(GPU)
-        
-        # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
-        num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
-        num_query   = num_items[:,1].detach().numpy().flatten()
-        batch_sz    = num_items.shape[0]
- 
-        x_sup = x_sup.unsqueeze(2) # 1x7*29 --> 1x7x1*29
-        x_que = x_que.unsqueeze(2) # 1x8*29 --> 1x8x1*29
-        
-        # - feature encoder
-        x_feat_sup = FeatEnc(x_sup) # 1x7x1*64     
-        x_feat_que = FeatEnc(x_que) # 1x8x1*64
-        
-        # - relation network
-        y_hat = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8
-        
-        # Prepare ground-truth simlarity score and mask
-        y_gt  = label_que[:,:,1]
-        y_mask = np.zeros((batch_sz,10), dtype=np.float32)
-        for b in np.arange(batch_sz):
-            y_mask[b,:num_query[b]] = 1
-        y_mask = torch.FloatTensor(y_mask).cuda(GPU)    
-        
-        # Calcultate BCE loss
-        loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask, target=y_gt.cuda(GPU)*y_mask)
-        total_trloss += loss.item()
     
-        # Update Nets
-        FeatEnc.zero_grad()
-        RN.zero_grad()        
+    if args.load_continue_latest is None:
+        START_EPOCH = 0  
         
-        loss.backward()
-        #torch.nn.utils.clip_grad_norm_(FeatEnc.parameters(), 0.5)
-        #torch.nn.utils.clip_grad_norm_(RN.parameters(), 0.5)
+    else:
+        latest_fpath = max(glob.iglob(MODEL_SAVE_PATH + "check*.pth"),key=os.path.getctime)  
+        checkpoint = torch.load(latest_fpath, map_location='cuda:{}'.format(GPU))
+        tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['loss']))
+        FeatEnc.load_state_dict(checkpoint['FE_state'])
+        RN.load_state_dict(checkpoint['RN_state'])
+        FeatEnc_optim.load_state_dict(checkpoint['FE_opt_state'])
+        RN_optim.load_state_dict(checkpoint['RN_opt_state'])
+        FeatEnc_scheduler.load_state_dict(checkpoint['FE_sch_state'])
+        RN_scheduler.load_state_dict(checkpoint['RN_sch_state'])
+        START_EPOCH = checkpoint['ep']
         
-        FeatEnc_optim.step()
-        RN_optim.step()
         
-        # Decision
-        y_prob = (torch.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
-        y_pred = ((torch.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
-
-        # Prepare display
-        sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
-        sample_que = label_que[0,:num_query[0],1].long().numpy().flatten()
-        sample_pred = y_pred[0,:num_query[0]].flatten()
-        sample_prob = y_prob[0, :num_query[0]].flatten()
-    
-        # Acc
-        total_corrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
-        total_query += np.sum(num_query)
-
-        # Restore GPU memory
-        del loss, x_feat_sup, x_feat_que, y_hat 
-
-        if (session+1)%5000 == 0:
-            hist_trloss.append(total_trloss/5000)
-            hist_tracc.append(total_corrects/total_query)
-            tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
-                       "Q:" + np.array2string(sample_que) + '\n' +
-                       "P:" + np.array2string(sample_pred) + '\n'+
-                       "prob:" + np.array2string(sample_prob))
+    for epoch in trange(START_EPOCH, EPOCHS, desc='epochs', position=0, ascii=True):
+        
+        tqdm.write('Train...')
+        tr_sessions_iter = iter(mtrain_loader)
+        total_corrects = 0
+        total_query    = 0
+        total_trloss   = 0
+        for session in trange(len(tr_sessions_iter), desc='sessions', position=1, ascii=True):
             
-            tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(session, hist_trloss[-1], hist_tracc[-1]))
-            total_corrects = 0
-            total_query    = 0
-            total_trloss   = 0
+            FeatEnc.train(); RN.train();
+            x_sup, x_que, x_log_sup, x_log_que, label_sup, label_que, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
+            x_sup, x_que = Variable(x_sup).cuda(GPU), Variable(x_que).cuda(GPU)
+            x_log_sup, x_log_que   = Variable(x_log_sup).cuda(GPU), Variable(x_log_que).cuda(GPU)
+            label_sup = Variable(label_sup).cuda(GPU)
             
+            # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
+            num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
+            num_query   = num_items[:,1].detach().numpy().flatten()
+            batch_sz    = num_items.shape[0]
+     
+            x_sup = x_sup.unsqueeze(2) # 1x7*29 --> 1x7x1*29
+            x_que = x_que.unsqueeze(2) # 1x8*29 --> 1x8x1*29
+            
+            # - feature encoder
+            x_feat_sup = FeatEnc(x_sup) # 1x7x1*64     
+            x_feat_que = FeatEnc(x_que) # 1x8x1*64
+            
+            # - relation network
+            y_hat = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8
+            
+            # Prepare ground-truth simlarity score and mask
+            y_gt  = label_que[:,:,1]
+            y_mask = np.zeros((batch_sz,10), dtype=np.float32)
+            for b in np.arange(batch_sz):
+                y_mask[b,:num_query[b]] = 1
+            y_mask = torch.FloatTensor(y_mask).cuda(GPU)    
+            
+            # Calcultate BCE loss
+            loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask, target=y_gt.cuda(GPU)*y_mask)
+            total_trloss += loss.item()
         
-        if (session+1)%40000 == 0:
-            # Validation
-            validate()
-            # Save
-            torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
-                        'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
-            'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
+            # Update Nets
+            FeatEnc.zero_grad()
+            RN.zero_grad()        
+            
+            loss.backward()
+            #torch.nn.utils.clip_grad_norm_(FeatEnc.parameters(), 0.5)
+            #torch.nn.utils.clip_grad_norm_(RN.parameters(), 0.5)
+            
+            FeatEnc_optim.step()
+            RN_optim.step()
+            
+            # Decision
+            y_prob = (torch.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
+            y_pred = ((torch.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
+    
+            # Prepare display
+            sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
+            sample_que = label_que[0,:num_query[0],1].long().numpy().flatten()
+            sample_pred = y_pred[0,:num_query[0]].flatten()
+            sample_prob = y_prob[0, :num_query[0]].flatten()
         
-        
+            # Acc
+            total_corrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
+            total_query += np.sum(num_query)
+    
+            # Restore GPU memory
+            del loss, x_feat_sup, x_feat_que, y_hat 
+    
+            if (session+1)%5000 == 0:
+                hist_trloss.append(total_trloss/5000)
+                hist_tracc.append(total_corrects/total_query)
+                tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
+                           "Q:" + np.array2string(sample_que) + '\n' +
+                           "P:" + np.array2string(sample_pred) + '\n'+
+                           "prob:" + np.array2string(sample_prob))
+                
+                tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(session, hist_trloss[-1], hist_tracc[-1]))
+                total_corrects = 0
+                total_query    = 0
+                total_trloss   = 0
+                
+            
+            if (session+1)%40000 == 0:
+                # Validation
+                validate(mval_loader, FeatEnc, RN, submission_mode=False)
+                # Save
+                torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
+                            'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
+                'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
+            
+if __name__ == '__main__':
+    main()
             
 

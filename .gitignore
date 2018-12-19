@@ -6,3 +6,4 @@ _*.py
 submission/*.*
 old/*.*
 summary/*.*
+__pycache__/*.*
