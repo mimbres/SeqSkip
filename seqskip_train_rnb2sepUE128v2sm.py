@@ -3,9 +3,10 @@
 """
 Created on Tue Dec 11 00:45:08 2018
 
-rnbc
+rnb2(sep)(user_emb): 유저 embedding: cat(audio_sup, log_sup, label_sup)>lin>LN>ReLU>1x1Conv
+                     audio relation: Relation-cat(audio_sup, audio_que, 유저embedding)
+                     metric relation: cat(audio relation, 유저emb)
 
-RN with batch + classifier
 @author: mimbres
 """
 
@@ -20,19 +21,20 @@ import glob, os
 import argparse
 from tqdm import trange, tqdm 
 from spotify_data_loader import SpotifyDataloader
+from utils.eval import evaluate
 cudnn.benchmark = True
 
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnbc1/")
+parser.add_argument("-s","--save_path",type = str, default = "./save/exp_rnb2_sepUE128v2sm/")
 parser.add_argument("-l","--load_continue_latest",type = str, default = None)
 parser.add_argument("-w","--class_num",type = int, default = 2)
-parser.add_argument("-e","--epochs",type = int, default= 1000)
+parser.add_argument("-e","--epochs",type = int, default= 10)
 parser.add_argument("-lr","--learning_rate", type = float, default = 0.001)
-parser.add_argument("-b","--train_batch_size", type = int, default = 1024)
+parser.add_argument("-b","--train_batch_size", type = int, default = 2048)
 parser.add_argument("-g","--gpu",type=int, default=0)
-#parser.add_argument("-e","--embed_hidden_unit",type=int, default=2)
+
 args = parser.parse_args()
 
 
@@ -47,11 +49,14 @@ GPU = args.gpu
 MODEL_SAVE_PATH = args.save_path
 os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
 
+
 hist_trloss = list()
 hist_tracc  = list()
 hist_vloss  = list()
 hist_vacc   = list()
 np.set_printoptions(precision=3)
+
+
 
 #Feature encoder:
 class MLP(nn.Module):
@@ -74,7 +79,7 @@ class RelationNetwork(nn.Module):
                  num_sup_max=10, num_que_max=10,
                  in_feat_sup_sz=64, in_feat_que_sz=64, 
                  in_log_sup_sz=41, in_log_que_sz=0,
-                 in_label_sup_sz=3): # 64,64,41,0,3
+                 in_label_sup_sz=3, ue_sz=128, ue_sz2=40): # 64,64,41,0,3
         super(RelationNetwork, self).__init__()
         self.num_sup_max = num_sup_max
         self.num_que_max = num_que_max
@@ -83,59 +88,73 @@ class RelationNetwork(nn.Module):
         self.in_log_sup_sz = in_log_sup_sz
         self.in_log_que_sz = in_log_que_sz
         self.in_label_sup_sz = in_label_sup_sz
-        self.layer1_input_sz = in_feat_sup_sz + in_feat_que_sz + in_log_sup_sz + in_log_que_sz + in_label_sup_sz
+        self.ue_sz = ue_sz
+        self.ue_sz2 = ue_sz2
+        self.layer1_input_sz = in_feat_sup_sz + in_feat_que_sz + ue_sz # SEP RELATION: we drop log and labels here.
         
         self.layer1 = nn.Sequential(
-                        nn.Linear(self.layer1_input_sz, 512), # bx8x7x1*172 (bx8x7x1*213) -> bx8x7x1*512
-                        nn.LayerNorm(512),
-                        nn.ReLU())
-        self.layer2 = nn.Sequential(
-                        nn.Linear(512, 256),
+                        nn.Linear(self.layer1_input_sz, 256), # bx8x7x1*128 -> bx8x7x1*512
                         nn.LayerNorm(256),
                         nn.ReLU())
-        self.fc1 = nn.Linear(256,64)
-        self.fc2 = nn.Linear(64,1) 
+        self.layer2 = nn.Sequential(
+                        nn.Linear(256, 128),
+                        nn.LayerNorm(128),
+                        nn.ReLU())
+        self.fc1 = nn.Linear(128+ue_sz2,32)
+        self.fc2 = nn.Linear(32,1) 
 
-        # Option: embedding for log data
+        # Option: user embedding layer
+        self.u_emb1 = nn.Sequential(
+                        nn.Linear(108,ue_sz), # bx7x1*108 --> bx7x1*16
+                        nn.LayerNorm(ue_sz),  
+                        nn.ReLU(), 
+                        nn.Conv1d(10,1,1,bias=False)) # 1x1Conv --> bx1x1*16
+        
+        self.u_emb2 = nn.Sequential(
+                        nn.Linear(108,ue_sz2), # bx7x1*108 --> bx7x1*40
+                        nn.LayerNorm(ue_sz2),  
+                        nn.ReLU(), 
+                        nn.Conv1d(10,1,1,bias=False), # 1x1Conv --> bx1x1*40
+                        nn.ReLU())
+        
         # Option: classifier 
         self.classifier = nn.Linear(10,1)
 
     def forward(self, x_sup, x_que, x_log_sup, y_log_que, label_sup):
-        relation_pairs = self.pack_relation_pairs(x_sup, x_que, x_log_sup, y_log_que, label_sup) # bx8x7x1x172 (bx8x7x1x213) 
-        out = self.layer1(relation_pairs) #bx8x7x1*512
-        out = self.layer2(out) #bx8x7x1*256
-        out = F.relu(self.fc1(out)) # bx8x7x1*64
-        out = F.relu(self.fc2(out)) # bx8x7*1  # sigmoid?
-        out = out.view(-1,10,10)
-        out = self.classifier(out) # bx8x1
-        out = out.view(-1,10) # bx8
-        return out 
-    
-    
-    def pack_relation_pairs(self, x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup):
         # x_feat_sup: bx7x1*64, x_feat_que: bx8x1*64
-        # _extras: concat support logs(d=41) and labels(d=3) to feat_support. QUERY SHOULD NOT INCLUDE THESE...
-        _extras_sup = torch.cat((x_log_sup, label_sup), 2).unsqueeze(2) # bx7x1*44  
-        x_feat_sup = torch.cat((x_feat_sup, _extras_sup), 3) # bx7x1*108
-        x_feat_sup_ext = x_feat_sup.unsqueeze(1).repeat(1,10,1,1,1) # bx8x7x1*108
+        # x_log_sup: bx7*41, label_sup:bx10*3
+        ######### User Emb:(x_feat_sup, log_sup, label_sup)
+        ue_source = torch.cat((x_sup.squeeze(2), x_log_sup, label_sup), 2) # bx7*108
+        ue = self.u_emb1(ue_source) # bx1x16, 16D user embedding
+    
+        ######### Audio relation: (audio_sup, audio_que, 유저embedding)
+        audio_relation_pairs = torch.cat((x_sup.unsqueeze(1).repeat(1,10,1,1,1),
+                                    x_que.unsqueeze(2).repeat(1,1,10,1,1),
+                                    ue.view(-1,1,1,1,self.ue_sz).repeat(1,10,10,1,1) ), 4) # bx8x7x1*144
         
-        if self.in_log_que_sz is not 0: # As default, we don't use x_log_que
-            _extras_que = x_log_que.unsqueeze(2) # (bx8x1*41)
-            x_feat_que = torch.cat((x_feat_que, _extras_que), 3) # (bx8x1*108)
+        #             metric relation: (audio relation, 유저emb)
+        out = self.layer1(audio_relation_pairs) # bx7x8x1*512
+        out = self.layer2(out) # bx7x8x1*256
         
-        x_feat_que_ext = x_feat_que.unsqueeze(2).repeat(1,1,10,1,1)
-        #x_feat_que_ext = x_feat_que.unsqueeze(1).repeat(1,10,1,1,1) # bx7x8x1*64 (bx7x8x1*105)
-        #x_feat_que_ext = torch.transpose(x_feat_que_ext,1,2) # bx8x7x1*64 (bx8x7x1*105)
-        
-        x_relation_pairs = torch.cat((x_feat_sup_ext, x_feat_que_ext), 4) # bx8x7x1*172 (bx8x7x1*213)
-        return x_relation_pairs
+        ###
+        #out = torch.cat((out, _ext_sup), 4) # bx8x7x1*264
+        ue2 = self.u_emb2(ue_source).view(-1,1,1,1,self.ue_sz2).repeat(1,10,10,1,1)
+        out = torch.cat((out, ue2), 4) #bx8x7x1*(256+ue_sz2)
+        out = F.relu(self.fc1(out)) # -> bx7x8x1*64
+        out = torch.sigmoid(self.fc2(out)) # -> bx7x8*1
+        out = out.view(-1,10,10,1)
+        return out
     
         
-    
+        
+
 #%%
-def validate(mval_loader, FeatEnc, RN, submission_mode):
+
+
+def validate(mval_loader, FeatEnc, RN, eval_mode):
     tqdm.write("Validation...")
     submit = []
+    gt     = []
     total_vloss    = 0
     total_vcorrects = 0
     total_vquery    = 0
@@ -157,49 +176,62 @@ def validate(mval_loader, FeatEnc, RN, submission_mode):
         x_feat_sup = FeatEnc(x_sup) # 1x7x1*64     
         x_feat_que = FeatEnc(x_que) # 1x8x1*64
         
-        y_hat = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8
-        y_gt  = label_que[:,:,1]
-        y_mask = np.zeros((batch_sz,10), dtype=np.float32)
+        y_hat_relation = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8x7*1
+        
+        y_sup_ext = label_sup[:,:,1].detach().cpu().view(-1,1,10,1).repeat(1,10,1,1) # bx8x7*1
+        y_que_ext = label_que[:,:,1].view(-1,10,1,1).repeat(1,1,10,1) # bx7x8*1
+        y_relation = (y_sup_ext==y_que_ext).float().view(-1,10,10,1)  # bx8x7*1
+    
+        y_mask = np.zeros((batch_sz,10,10,1), dtype=np.float32)
         for b in np.arange(batch_sz):
-            y_mask[b,:num_query[b]] = 1
-        y_mask = torch.FloatTensor(y_mask).cuda(GPU)    
-
-        loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask, target=y_gt.cuda(GPU)*y_mask)
+            y_mask[b,:num_query[b],:num_support[b],0] = 1
+        y_mask = torch.FloatTensor(y_mask).cuda(GPU)
+        
+        loss = F.mse_loss(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
         total_vloss += loss.item()
         
-        # Decision
-        y_prob = (torch.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
-        y_pred = ((torch.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
-        if submission_mode is True:
-            for b in np.arange(batch_sz):
-                submit.append(y_pred[b,:num_query[b]].flatten())
+        decision = torch.FloatTensor(np.zeros((batch_sz, 10, 10 ,2))).detach().cpu() # bx8x7*2 (b x que x sup x class)
+        decision[:,:,:,0] = (y_hat_relation.detach().cpu()*(y_sup_ext==0).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==1).float()).view(-1,10,10)
+        decision[:,:,:,1] = (y_hat_relation.detach().cpu()*(y_sup_ext==1).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==0).float()).view(-1,10,10)
+        decision = decision * y_mask.detach().cpu().repeat(1,1,1,2)
+        y_pred = torch.argmax(decision.sum(2),2).numpy()
+        sim_score = (y_hat_relation.detach()*y_mask).cpu().numpy()
         
-        # Prepare display
         sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
-        sample_que = label_que[0,:num_query[0],1].long().numpy().flatten()
+        sample_que = label_que[0,:num_query[0],1].detach().long().numpy().flatten()
         sample_pred = y_pred[0,:num_query[0]].flatten()
-        sample_prob = y_prob[0, :num_query[0]].flatten()
+ 
     
-        # Acc
-        total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
+    
+        _y_gt  = label_que[:,:,1].detach().cpu().numpy()
+
+        for b in np.arange(batch_sz):
+            submit.append(y_pred[b,:num_query[b]].flatten())
+            gt.append(_y_gt[b,:num_query[b]].flatten())
+    
+    
+        total_vcorrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask[:,:,0,0].cpu().numpy())  
         total_vquery += np.sum(num_query)
 
-        if (val_session+1)%2000 == 0:
+        if (val_session+1)%400 == 0:
+            tqdm.write(np.array2string(sim_score[0,:,:,0]))
             tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                        "Q:" + np.array2string(sample_que) + '\n' +
-                       "P:" + np.array2string(sample_pred) + '\n'+
-                       "prob:" + np.array2string(sample_prob))
-            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,total_vloss/val_session, total_vcorrects/total_vquery))
+                       "P:" + np.array2string(sample_pred) )
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
         # Restore GPU memory
-        del loss, y_hat
+        del loss, y_hat_relation
+    # Avg.Acc
+    aacc = evaluate(submit, gt)
+    tqdm.write("AACC={0:.6f}, FirstAcc={1:.6f}".format(aacc[0], aacc[1]))    
         
-    hist_vloss.append(total_vloss/(val_session+1))
+    hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
-    return submit
+    return
     
 
 # Main
-def main():
+def main():  
     # Trainset stats: 2072002577 items from 124950714 sessions
     print('Initializing dataloader...')
     mtrain_loader = SpotifyDataloader(config_fpath=args.config,
@@ -210,13 +242,13 @@ def main():
     
     mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True, # True, because we use part of trainset as testset
-                                      data_sel=(99965071, 124950714),#(99965071, 124950714), # 20%를 테스트
-                                      batch_size=4096,
-                                      shuffle=False) 
+                                      data_sel=(3000000, 5000000),#(99965071, 124950714), # 20%를 테스트
+                                      batch_size=2048,
+                                      shuffle=True) 
     
     # Init neural net
     #FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).apply(weights_init).cuda(GPU)
-    FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).cuda(GPU)
+    FeatEnc = MLP(input_sz=29, hidden_sz=256, output_sz=64).cuda(GPU)
     RN      = RelationNetwork().cuda(GPU)
     
     FeatEnc_optim = torch.optim.Adam(FeatEnc.parameters(), lr=LEARNING_RATE)
@@ -227,12 +259,12 @@ def main():
     
     
     if args.load_continue_latest is None:
-        START_EPOCH = 0  
+        START_EPOCH = 0
         
     else:
         latest_fpath = max(glob.iglob(MODEL_SAVE_PATH + "check*.pth"),key=os.path.getctime)  
         checkpoint = torch.load(latest_fpath, map_location='cuda:{}'.format(GPU))
-        tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['hist_trloss'][-1]))
+        tqdm.write("Loading saved model from '{0:}'... loss: {1:.6f}".format(latest_fpath,checkpoint['loss']))
         FeatEnc.load_state_dict(checkpoint['FE_state'])
         RN.load_state_dict(checkpoint['RN_state'])
         FeatEnc_optim.load_state_dict(checkpoint['FE_opt_state'])
@@ -270,17 +302,19 @@ def main():
             x_feat_que = FeatEnc(x_que) # 1x8x1*64
             
             # - relation network
-            y_hat = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8
+            y_hat_relation = RN(x_feat_sup, x_feat_que, x_log_sup, x_log_que, label_sup) # bx8x7*1
             
             # Prepare ground-truth simlarity score and mask
-            y_gt  = label_que[:,:,1]
-            y_mask = np.zeros((batch_sz,10), dtype=np.float32)
+            y_sup_ext = label_sup[:,:,1].detach().cpu().view(-1,1,10,1).repeat(1,10,1,1) # bx8x7*1
+            y_que_ext = label_que[:,:,1].view(-1,10,1,1).repeat(1,1,10,1) # bx7x8*1
+            y_relation = (y_sup_ext==y_que_ext).float().view(-1,10,10,1)  # bx8x7*1
+            y_mask = np.zeros((batch_sz,10,10,1), dtype=np.float32)
             for b in np.arange(batch_sz):
-                y_mask[b,:num_query[b]] = 1
-            y_mask = torch.FloatTensor(y_mask).cuda(GPU)    
+                y_mask[b,:num_query[b],:num_support[b],0] = 1
+            y_mask = torch.FloatTensor(y_mask).cuda(GPU)
             
-            # Calcultate BCE loss
-            loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask, target=y_gt.cuda(GPU)*y_mask)
+            # Calcultate MSE loss
+            loss = F.mse_loss(input=y_hat_relation*y_mask, target=y_relation.cuda(GPU)*y_mask)
             total_trloss += loss.item()
         
             # Update Nets
@@ -295,45 +329,52 @@ def main():
             RN_optim.step()
             
             # Decision
-            y_prob = (torch.sigmoid(y_hat)*y_mask).detach().cpu().numpy()
-            y_pred = ((torch.sigmoid(y_hat)>0.5).float()*y_mask).detach().cpu().long().numpy()
-    
+            decision = torch.FloatTensor(np.zeros((batch_sz, 10, 10 ,2))).detach().cpu() # bx8x7*2 (b x que x sup x class)
+            decision[:,:,:,0] = (y_hat_relation.detach().cpu()*(y_sup_ext==0).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==1).float()).view(-1,10,10)
+            decision[:,:,:,1] = (y_hat_relation.detach().cpu()*(y_sup_ext==1).float() + (1-y_hat_relation.detach().cpu())*(y_sup_ext==0).float()).view(-1,10,10)
+            decision = decision * y_mask.detach().cpu().repeat(1,1,1,2)
+            y_pred = torch.argmax(decision.sum(2),2).numpy()
+            sim_score = (y_hat_relation.detach()*y_mask).cpu().numpy()
+            
             # Prepare display
             sample_sup = label_sup[0,:num_support[0],1].detach().long().cpu().numpy().flatten() 
-            sample_que = label_que[0,:num_query[0],1].long().numpy().flatten()
+            sample_que = label_que[0,:num_query[0],1].detach().long().numpy().flatten()
             sample_pred = y_pred[0,:num_query[0]].flatten()
-            sample_prob = y_prob[0, :num_query[0]].flatten()
-        
+     
             # Acc
-            total_corrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask.cpu().numpy())  
+            total_corrects += np.sum((y_pred == label_que[:,:,1].long().numpy()) * y_mask[:,:,0,0].cpu().numpy())  
             total_query += np.sum(num_query)
-    
+            
             # Restore GPU memory
-            del loss, x_feat_sup, x_feat_que, y_hat 
+            del loss, x_feat_sup, x_feat_que, y_hat_relation 
     
-            if (session+1)%1000 == 0:
-                hist_trloss.append(total_trloss/5000)
+            if (session+1)%900 == 0:
+                hist_trloss.append(total_trloss/900)
                 hist_tracc.append(total_corrects/total_query)
+                tqdm.write(np.array2string(sim_score[0,:,:,0]))
                 tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                            "Q:" + np.array2string(sample_que) + '\n' +
-                           "P:" + np.array2string(sample_pred) + '\n'+
-                           "prob:" + np.array2string(sample_prob))
-                
+                           "P:" + np.array2string(sample_pred) )
                 tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(session, hist_trloss[-1], hist_tracc[-1]))
                 total_corrects = 0
                 total_query    = 0
                 total_trloss   = 0
-
-
+                
+            
+            if (session+1)%4000 == 0:
+                 # Validation
+                 validate(mval_loader, FeatEnc, RN, eval_mode=True)
+                 # Save
+                 torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
+                             'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
+                             'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
         # Validation
-        validate(mval_loader, FeatEnc, RN, submission_mode=False)
+        validate(mval_loader, FeatEnc, RN, eval_mode=True)
         # Save
-        torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': None, 'hist_vacc': hist_vacc,
+        torch.save({'ep': epoch, 'sess':session, 'FE_state': FeatEnc.state_dict(), 'RN_state': RN.state_dict(), 'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
                     'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'FE_opt_state': FeatEnc_optim.state_dict(), 'RN_opt_state': RN_optim.state_dict(),
         'FE_sch_state': FeatEnc_scheduler.state_dict(), 'RN_sch_state': RN_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
-        
+     
     
 if __name__ == '__main__':
-    main()
-                
-
+    main()  
