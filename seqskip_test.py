@@ -73,7 +73,7 @@ def main():
     RN.load_state_dict(checkpoint['RN_state'])
 
     # Test
-    submission = validate(mtest_loader, FeatEnc, RN, submission_mode=True)
+    submission = validate(mtest_loader, FeatEnc, RN, True)
     if len(submission)!=31251398: print("WARNING: submission size not matches.");
 
     # Save
