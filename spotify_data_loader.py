@@ -8,9 +8,9 @@ Created on Sat Dec  8 00:01:10 2018
 NOTE: In advance of using this code, plaease run "preparing_data.py" once.
 """
 import numpy as np
-import sys
 from torch.utils.data.dataset import Dataset
-from torch.utils.data import DataLoader
+#from torch.utils.data import DataLoader <--이게 문제가있다고함
+from torch.utils.data.dataloader import DataLoader
 from utils.save_load_config import load_config
 from utils.matrix_math import indices_to_one_hot
 
@@ -22,6 +22,7 @@ def SpotifyDataloader(config_fpath="./config_init_dataset.json",
                       mtrain_mode=True,
                       random_track_order=False,
                       data_sel=None,
+                      seq_mode=False,
                       batch_size=1,
                       shuffle=False,
                       num_workers=4,
@@ -30,7 +31,8 @@ def SpotifyDataloader(config_fpath="./config_init_dataset.json",
     dset = SpotifyDataset(config_fpath=config_fpath,
                                 mtrain_mode=mtrain_mode,
                                 random_track_order=random_track_order,
-                                data_sel=data_sel)
+                                data_sel=data_sel,
+                                seq_mode=seq_mode)
     dloader = DataLoader(dset,
                          batch_size=batch_size,
                          shuffle=shuffle,
@@ -53,7 +55,8 @@ class SpotifyDataset(Dataset):
                  config_fpath="./config_init_dataset.json",
                  mtrain_mode=True,
                  random_track_order=False, 
-                 data_sel=None):
+                 data_sel=None,
+                 seq_mode=False):
         
         config = load_config(config_fpath)
         TRACK_FEAT_NPY_PATH       = config.output_data_root + "track_feat.npy"
@@ -67,6 +70,7 @@ class SpotifyDataset(Dataset):
         self.mtrain_mode           = mtrain_mode
         self.random_track_order    = random_track_order
         self.data_sel              = data_sel
+        self.seq_mode              = seq_mode
         self.session_start_end_idx = []
         self.dt_mm                 = []
         self.track_feat            = []
@@ -101,54 +105,88 @@ class SpotifyDataset(Dataset):
     def __getitem__(self, index): 
         # 'num_items': the number of items(~=tracks) in one session
         _num_sup = np.floor((self.session_start_end_idx[index,1] - self.session_start_end_idx[index,0])/2).astype(int)
-        _num_que   = np.ceil((self.session_start_end_idx[index,1] - self.session_start_end_idx[index,0])/2).astype(int)
-        num_items = np.array([_num_sup, _num_que])  
+        _num_que = np.ceil((self.session_start_end_idx[index,1] - self.session_start_end_idx[index,0])/2).astype(int)
+        num_items = np.array([_num_sup, _num_que], dtype=np.int)  
 
-        # session_log
-        session_log_sup = self.dt_mm[np.arange(self.session_start_end_idx[index,0],
-                                           self.session_start_end_idx[index,0]+_num_sup), :]
-        session_log_que = self.dt_mm[np.arange(self.session_start_end_idx[index,0]+_num_sup,
-                                               self.session_start_end_idx[index,1]), :]
+
+            
+        if self.seq_mode is False:
+            # session_log
+            session_log_sup = self.dt_mm[np.arange(self.session_start_end_idx[index,0],
+                                               self.session_start_end_idx[index,0]+_num_sup), :]
+            session_log_que = self.dt_mm[np.arange(self.session_start_end_idx[index,0]+_num_sup,
+                                                   self.session_start_end_idx[index,1]), :]
+            # Unpack track_id and dates (packed as 4 uint8, each):
+            track_ids_sup = np.ascontiguousarray(session_log_sup[:, :4]).view(np.uint32).flatten() # dim[0,1,2,3] for track_id
+            track_ids_que = np.ascontiguousarray(session_log_que[:, :4]).view(np.uint32).flatten()
+            #dates     = np.ascontiguousarray(session_log[:, 4:8]).view(np.uint32).flatten() # dim[4,5,6,7] for date.   
+                # date는 일단 안씀.., 
+            # NOTE: We always keep the session length of output feature as 20, and several last items are dummys filled with 0s.
+            # DIMs: feats(dim=29) = track_feat(dim=29), logs(dim=41) = log_feat(dim=41), 
+            feats_sup = np.zeros(shape=(10, 29), dtype=np.float32)
+            feats_que = np.zeros(shape=(10, 29), dtype=np.float32)
+            logs_sup  = np.zeros(shape=(10, 41), dtype=np.float32)
+            logs_que  = np.zeros(shape=(10, 41), dtype=np.float32)
+            labels_sup = np.zeros(shape=(10, 3), dtype=np.float32)
+            labels_que = np.zeros(shape=(10, 3), dtype=np.float32)
+            
+            # Fill out the feats dimensions as:
+            # [0,..28] : track features 
+            feats_sup[:_num_sup, :]  = self.track_feat[track_ids_sup, :]
+            feats_que[:_num_que, :]  = self.track_feat[track_ids_que, :]
     
-        # Unpack track_id and dates (packed as 4 uint8, each):
-        track_ids_sup = np.ascontiguousarray(session_log_sup[:, :4]).view(np.uint32).flatten() # dim[0,1,2,3] for track_id
-        track_ids_que = np.ascontiguousarray(session_log_que[:, :4]).view(np.uint32).flatten()
-        #dates     = np.ascontiguousarray(session_log[:, 4:8]).view(np.uint32).flatten() # dim[4,5,6,7] for date.   
-        # date는 일단 안씀.., 
-        
-        # NOTE: We always keep the session length of output feature as 20, and several last items are dummys filled with 0s.
-        # DIMs: feats(dim=29) = track_feat(dim=29), logs(dim=41) = log_feat(dim=41), 
-        feats_sup = np.zeros(shape=(10, 29), dtype=np.float32)
-        feats_que = np.zeros(shape=(10, 29), dtype=np.float32)
-        logs_sup  = np.zeros(shape=(10, 41), dtype=np.float32)
-        logs_que  = np.zeros(shape=(10, 41), dtype=np.float32)
-        labels_sup = np.zeros(shape=(10, 3), dtype=np.float32)
-        labels_que = np.zeros(shape=(10, 3), dtype=np.float32)
-        
-        # Fill out the feats dimensions as:
-        # [0,..28] : track features 
-        feats_sup[:_num_sup, :]  = self.track_feat[track_ids_sup, :]
-        feats_que[:_num_que, :]  = self.track_feat[track_ids_que, :]
+            # Fill out the logs dimensions as:
+            # [0]       : minmax-scaled date in the range of -1 to 1
+            # [1,...8] : n_seekfwd, n_seekback, skip_1,2,3, hist_sh, ct_swc, no_p, s_p, l_p, premium
+            # [9,..40] : one-hot-encoded categorical labels of context_type, bh_start, bh_end 
+            logs_sup[:_num_sup, 0] = (session_log_sup[:, 8] / 23) * 2 - 1
+            logs_que[:_num_que, 0] = (session_log_que[:, 8] / 23) * 2 - 1
+            logs_sup[:_num_sup, 1:9] = session_log_sup[:, [9,10,14,15,16,17,18,19]]
+            logs_que[:_num_que, 1:9] = session_log_que[:, [9,10,14,15,16,17,18,19]]
+            logs_sup[:_num_sup, 9:15] = indices_to_one_hot(data=session_log_sup[:,20], nb_classes=6)
+            logs_que[:_num_que, 9:15] = indices_to_one_hot(data=session_log_que[:,20], nb_classes=6)
+            logs_sup[:_num_sup, 15:28] = indices_to_one_hot(data=session_log_sup[:,21], nb_classes=13)
+            logs_que[:_num_que, 15:28] = indices_to_one_hot(data=session_log_que[:,21], nb_classes=13)
+            logs_sup[:_num_sup, 28:41] = indices_to_one_hot(data=session_log_sup[:,22], nb_classes=13) 
+            logs_que[:_num_que, 28:41] = indices_to_one_hot(data=session_log_que[:,22], nb_classes=13)
+            
+            labels_sup[:_num_sup, :] = session_log_sup[:, [11,12,13]] 
+            labels_que[:_num_que, :] = session_log_que[:, [11,12,13]] 
+            return feats_sup, feats_que, logs_sup, logs_que, labels_sup, labels_que, num_items, index
+        else: # for Seq Mode...
+            
+            session_log = self.dt_mm[np.arange(self.session_start_end_idx[index,0],
+                                               self.session_start_end_idx[index,1]), :]	
+            
+    # Unpack track_id and dates (packed as 4 uint8, each):
+            track_ids = np.ascontiguousarray(session_log[:, :4]).view(np.uint32).flatten() # dim[0,1,2,3] for track_id
+            #dates     = np.ascontiguousarray(session_log[:, 4:8]).view(np.uint32).flatten() # dim[4,5,6,7] for date. 
+            # date는 일단 안씀.., 
+            
+            # NOTE: Here we always keep the session length of the output feature as 20, and the first 10 items 
+            #       are supports with left padded 0s. The last 10 items are queries with right padded 0s.
+            ## DIMs: feats(dim=70) = [log_feat(dim=41), track_feat(dim=29)]
+            feats  = np.zeros(shape=(20, 70), dtype=np.float32)
+            labels = np.zeros(shape=(20,), dtype=np.float32)
+            y_mask = np.zeros((20,), dtype=np.float32)
+            # Fill out the feature dimensions as:
+            # [0]       : minmax-scaled date in the range of -1 to 1
+            # [1,...8] : n_seekfwd, n_seekback, skip_1,2,3, hist_sh, ct_swc, no_p, s_p, l_p, premium
+            # [9,..40] : one-hot-encoded categorical labels of context_type, bh_start, bh_end 
+            # [41,..69] : track features
+            lzs = int(10 - _num_sup) # number of left zeros for padding             
+            n_item = np.sum(num_items)
+            feats[lzs:lzs+n_item, 0]     = (session_log[:, 8] / 23) * 2 - 1
+            feats[lzs:lzs+n_item, 1:9]   = session_log[:, [9,10,14,15,16,17,18,19]]
+            feats[lzs:lzs+n_item, 9:15]  = indices_to_one_hot(data=session_log[:,20], nb_classes=6)
+            feats[lzs:lzs+n_item, 15:28] = indices_to_one_hot(data=session_log[:,21], nb_classes=13)
+            feats[lzs:lzs+n_item, 28:41] = indices_to_one_hot(data=session_log[:,22], nb_classes=13) 
+            feats[lzs:lzs+n_item, 41:]   = self.track_feat[track_ids, :]
+            labels[lzs:lzs+n_item]    = session_log[:, 12].flatten()             
 
-        # Fill out the logs dimensions as:
-        # [0]       : minmax-scaled date in the range of -1 to 1
-        # [1,...8] : n_seekfwd, n_seekback, skip_1,2,3, hist_sh, ct_swc, no_p, s_p, l_p, premium
-        # [9,..40] : one-hot-encoded categorical labels of context_type, bh_start, bh_end 
-        logs_sup[:_num_sup, 0] = (session_log_sup[:, 8] / 23) * 2 - 1
-        logs_que[:_num_que, 0] = (session_log_que[:, 8] / 23) * 2 - 1
-        logs_sup[:_num_sup, 1:9] = session_log_sup[:, [9,10,14,15,16,17,18,19]]
-        logs_que[:_num_que, 1:9] = session_log_que[:, [9,10,14,15,16,17,18,19]]
-        logs_sup[:_num_sup, 9:15] = indices_to_one_hot(data=session_log_sup[:,20], nb_classes=6)
-        logs_que[:_num_que, 9:15] = indices_to_one_hot(data=session_log_que[:,20], nb_classes=6)
-        logs_sup[:_num_sup, 15:28] = indices_to_one_hot(data=session_log_sup[:,21], nb_classes=13)
-        logs_que[:_num_que, 15:28] = indices_to_one_hot(data=session_log_que[:,21], nb_classes=13)
-        logs_sup[:_num_sup, 28:41] = indices_to_one_hot(data=session_log_sup[:,22], nb_classes=13) 
-        logs_que[:_num_que, 28:41] = indices_to_one_hot(data=session_log_que[:,22], nb_classes=13)
-        
-        labels_sup[:_num_sup, :] = session_log_sup[:, [11,12,13]] 
-        labels_que[:_num_que, :] = session_log_que[:, [11,12,13]] 
-        return feats_sup, feats_que, logs_sup, logs_que, labels_sup, labels_que, num_items, index
-
+            y_mask[lzs:lzs+n_item] = 1
+            return feats, labels, y_mask, num_items, index 
+    
 
     def __len__(self):
         return len(self.session_start_end_idx) # return the number of sessions that we have

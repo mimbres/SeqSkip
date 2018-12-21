@@ -61,7 +61,7 @@ def main():
     RelationNetwork = getattr(__import__(m, fromlist='RelationNetwork'), 'RelationNetwork')
     validate        = getattr(__import__(m, fromlist='validate'), 'validate')
     
-    FeatEnc = MLP(input_sz=29, hidden_sz=512, output_sz=64).cuda(GPU)
+    FeatEnc = MLP(input_sz=29, hidden_sz=256, output_sz=64).cuda(GPU)
     RN      = RelationNetwork().cuda(GPU)
     print(CHECKPOINT_PATH)
     print(MODEL_PATH)
