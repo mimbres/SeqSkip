@@ -40,7 +40,7 @@ parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
 parser.add_argument("-e","--epochs",type=int, default= 10)
 parser.add_argument("-lr","--learning_rate", type=float, default = 0.001)
-parser.add_argument("-b","--train_batch_size", type=int, default = 1024)
+parser.add_argument("-b","--train_batch_size", type=int, default = 2048)
 parser.add_argument("-tsb","--test_batch_size", type=int, default = 1024)
 parser.add_argument("-g","--gpu",type=int, default=0)
 args = parser.parse_args()
@@ -320,7 +320,7 @@ def main():
                 total_trloss   = 0
                 
             
-            if (session+1)%4000 == 0:
+            if (session+1)%20000 == 0:
                  # Validation
                  validate(mval_loader, SM, eval_mode=True)
                  # Save
