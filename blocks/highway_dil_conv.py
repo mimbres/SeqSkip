@@ -23,7 +23,7 @@ class HighwayLayer(nn.Module):
         self.use_glu   = use_glu
         
         self.L = nn.Conv1d(in_ch, out_ch*2, kernel_size=k_sz, dilation=dil)
-        
+        self.inorm = nn.InstanceNorm1d(out_ch*2)
         if self.use_glu is True:
             self.glu = nn.GLU(dim=1)
             
@@ -38,6 +38,7 @@ class HighwayLayer(nn.Module):
         else:            
             pad = (0, 0) # in this case, just 1x1 conv..
         h = self.L(F.pad(x, pad))
+        h = self.inorm(h)
         if self.use_glu is True:
             return self.glu(h)    
         else:
