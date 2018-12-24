@@ -50,6 +50,7 @@ args = parser.parse_args()
 USE_SUPLOG = args.use_suplog_as_feat
 USE_PRED_LABEL = args.use_predicted_label
 USE_GLU    = args.use_glu
+INPUT_DIM = 72 if USE_SUPLOG else 31
 
 CLASS_NUM = args.class_num
 EPOCHS = args.epochs
@@ -95,7 +96,7 @@ np.set_printoptions(precision=3)
 #        return x#x[:,:128,:]
         
 class SeqClassifier(nn.Module):
-    def __init__(self, input_ch=128, e_ch=128,
+    def __init__(self, input_ch, e_ch,
                  h_io_chs=[1,1,1,1,1,1,1],
                  h_k_szs=[2,2,2,2,2,1,1],
                  h_dils=[1,2,4,8,16,1,1],
@@ -117,7 +118,7 @@ class SeqClassifier(nn.Module):
         
 
 class SeqModel(nn.Module):
-    def __init__(self, input_dim=72, e_ch=128, d_ch=256, use_glu=False):
+    def __init__(self, input_dim=INPUT_DIM, e_ch=256, d_ch=256, use_glu=USE_GLU):
         super(SeqModel, self).__init__()
         #self.enc = SeqFeatEnc(input_dim=input_dim, e_ch=e_ch, d_ch=d_ch, use_glu=use_glu)
         #self.clf = SeqClassifier(input_ch=d_ch, e_ch=e_ch, use_glu=use_glu)
@@ -186,7 +187,7 @@ def validate(mval_loader, SM, eval_mode):
         
         
         # Eval, Submission
-        if eval_mode is True:
+        if eval_mode is not 0:
             for b in np.arange(batch_sz):
                 submit.append(y_pred[b,:num_query[b]].flatten())
                 gt.append(y_numpy[b,:num_query[b]].flatten())
@@ -204,12 +205,13 @@ def validate(mval_loader, SM, eval_mode):
         del loss, y_hat, x # Restore GPU memory
         
     # Avg.Acc
-    aacc = evaluate(submit, gt)
-    tqdm.write("AACC={0:.6f}, FirstAcc={1:.6f}".format(aacc[0], aacc[1]))    
+    if eval_mode==1:
+        aacc = evaluate(submit, gt)
+        tqdm.write("AACC={0:.6f}, FirstAcc={1:.6f}".format(aacc[0], aacc[1])) 
         
     hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
-    return
+    return submit
     
 
 # Main
@@ -231,8 +233,7 @@ def main():
                                       seq_mode=True) 
     
     # Init neural net
-    _input_dim = 72 if USE_SUPLOG else 31
-    SM = SeqModel(input_dim=_input_dim, e_ch=256, d_ch=256, use_glu=USE_GLU).cuda(GPU)
+    SM = SeqModel().cuda(GPU)
     SM_optim = torch.optim.Adam(SM.parameters(), lr=LEARNING_RATE)
     SM_scheduler = StepLR(SM_optim, step_size=1, gamma=0.7)  
     

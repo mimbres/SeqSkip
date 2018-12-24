@@ -170,7 +170,7 @@ class SpotifyDataset(Dataset):
             labels = np.zeros(shape=(20,), dtype=np.float32)
             y_mask = np.zeros((20,), dtype=np.float32)
             # Fill out the feature dimensions as:
-            # [0]       : minmax-scaled date in the range of -1 to 1
+            # [0]       : minmax-scaled hour in the range of -1 to 1
             # [1,...8] : n_seekfwd, n_seekback, skip_1,2,3, hist_sh, ct_swc, no_p, s_p, l_p, premium
             # [9,..40] : one-hot-encoded categorical labels of context_type, bh_start, bh_end 
             # [41,..69] : track features
