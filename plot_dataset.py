@@ -121,3 +121,49 @@ plt.bar(labels, [min_skip, avg_skip, max_skip, min_sess_len, avg_sess_len, max_s
 plt.yticks(np.arange(0,21,2))
 plt.grid(linestyle='--', axis='y')
 plt.title('number of skips in sessions')
+
+
+
+#%% histogram of n_seekfwd, n_seekback
+import matplotlib.pyplot as plt
+import numpy as np
+
+# n_seekfwd
+n_seekfwd, cnt = np.unique(mtrain_loader.dataset.dt_mm[:,9], return_counts=True)
+plt.figure(); plt.bar(np.arange(len(cnt)), cnt)
+x_index = np.arange(len(cnt), step=50)
+plt.xticks(x_index, n_seekfwd.astype(str)[x_index], fontsize=12, rotation=45)
+plt.ylabel('play count'); plt.title("histogram of n_seekfwd(all)")
+
+n_seekfwd = n_seekfwd[1:]; cnt = cnt[1:]
+plt.figure(); plt.bar(np.arange(len(cnt)), cnt)
+x_index = np.arange(len(cnt), step=50)
+plt.xticks(x_index, n_seekfwd.astype(str)[x_index], fontsize=12, rotation=45)
+plt.ylabel('play count'); plt.title("histogram of n_seekfwd(NOT 0)")
+
+n_seekfwd = n_seekfwd[5:]; cnt = cnt[5:]
+plt.figure(); plt.bar(np.arange(len(cnt)), cnt)
+x_index = np.arange(len(cnt), step=50)
+plt.xticks(x_index, n_seekfwd.astype(str)[x_index], fontsize=12, rotation=45)
+plt.ylabel('play count'); plt.title("histogram of n_seekfwd(>5)")
+
+
+
+# n_seekback
+n_seekback, cnt = np.unique(mtrain_loader.dataset.dt_mm[:,10], return_counts=True)
+plt.figure(); plt.bar(np.arange(len(cnt)), cnt)
+x_index = np.arange(len(cnt), step=50)
+plt.xticks(x_index, n_seekback.astype(str)[x_index], fontsize=12, rotation=45)
+plt.ylabel('play count'); plt.title("histogram of n_seekback(all)")
+
+n_seekback = n_seekback[1:]; cnt = cnt[1:]
+plt.figure(); plt.bar(np.arange(len(cnt)), cnt)
+x_index = np.arange(len(cnt), step=50)
+plt.xticks(x_index, n_seekback.astype(str)[x_index], fontsize=12, rotation=45)
+plt.ylabel('play count'); plt.title("histogram of n_seekback(NOT 0)")
+
+n_seekback = n_seekback[5:]; cnt = cnt[5:]
+plt.figure(); plt.bar(np.arange(len(cnt)), cnt)
+x_index = np.arange(len(cnt), step=50)
+plt.xticks(x_index, n_seekback.astype(str)[x_index], fontsize=12, rotation=45)
+plt.ylabel('play count'); plt.title("histogram of n_seekback(>5)")

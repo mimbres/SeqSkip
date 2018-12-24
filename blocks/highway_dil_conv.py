@@ -43,7 +43,7 @@ class HighwayLayer(nn.Module):
             return self.glu(h)    
         else:
             h1, h2 = h[:, :self.out_ch,:], h[:, self.out_ch:, :]
-            return F.sigmoid(h1) * h2 + (1-F.sigmoid(h1)) * x
+            return torch.sigmoid(h1) * h2 + (1-torch.sigmoid(h1)) * x
     
     
     
