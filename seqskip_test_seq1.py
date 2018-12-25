@@ -34,18 +34,18 @@ SUBMISSION_OUTPUT_PATH = os.path.dirname(CHECKPOINT_PATH)
 
 # TSSET stats: 518275860 items within 31251398 sessions
 print('Initializing dataloader...')
-mtest_loader  = SpotifyDataloader(config_fpath=args.config,
-                                  mtrain_mode=False, # False = testset for submission
-                                  #data_sel=(0, 100),
-                                  batch_size=4096,
-                                  shuffle=False,
-                                  seq_mode=True) 
-
 #mtest_loader  = SpotifyDataloader(config_fpath=args.config,
-#                                  mtrain_mode=True, # True, because we use part of trainset as testset
-#                                  data_sel=(99965071, 110075071),#(99965071, 124950714), # 20%를 테스트
-#                                  batch_size=10,
-#                                  shuffle=True) 
+#                                  mtrain_mode=False, # False = testset for submission
+#                                  #data_sel=(0, 100),
+#                                  batch_size=4096,
+#                                  shuffle=False,
+#                                  seq_mode=True) 
+
+mtest_loader  = SpotifyDataloader(config_fpath=args.config,
+                                  mtrain_mode=True, # True, because we use part of trainset as testset
+                                  data_sel=(99965071, 110075071),#(99965071, 124950714), # 20%를 테스트
+                                  batch_size=10,
+                                  shuffle=True) 
 
 def save_submission(output, output_path):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
