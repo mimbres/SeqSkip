@@ -85,7 +85,7 @@ class SeqFeatEnc(nn.Module):
 #                 h_dils=[1,2,4,1,2,4,1,2,4,1,1,1,1],  #이것도 Receptive Field가 20인데 왜 안되는걸까??????
                  use_glu=False):
         super(SeqFeatEnc, self).__init__()
-        h_io_chs[:] = [n * e_ch for n in h_io_chs]
+        h_io_chs[:] = [n * d_ch for n in h_io_chs]
         # Layers:
         self.mlp = nn.Sequential(nn.Conv1d(input_dim,e_ch,1),
                                  nn.ReLU(),
