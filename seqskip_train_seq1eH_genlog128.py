@@ -75,30 +75,6 @@ hist_vloss_qlog =  list()
 hist_vloss_skip =  list()
 np.set_printoptions(precision=3)
 
-#class SeqFeatEnc(nn.Module):  
-#    def __init__(self, input_dim=72, e_ch=128, #d_ch=256,
-#                 #h_io_chs=[256, 256, 256, 256, 256, 256, 256],
-#                 d_ch=128,
-#                 h_io_chs=[1,1,1,1,1,1,1],
-#                 h_k_szs=[2,2,2,2,2,1,1],
-#                 h_dils=[1,2,4,8,16,1,1],
-##                 h_dils=[1,2,4,1,2,4,1,2,4,1,1,1,1],  #이것도 Receptive Field가 20인데 왜 안되는걸까??????
-#                 use_glu=False):
-#        super(SeqFeatEnc, self).__init__()
-#        h_io_chs[:] = [n * e_ch for n in h_io_chs]
-#        # Layers:
-#        self.mlp = nn.Sequential(nn.Conv1d(input_dim,e_ch,1),
-#                                 nn.ReLU(),
-#                                 nn.Conv1d(e_ch,d_ch,1))
-#        self.h_block = HighwayDCBlock(h_io_chs, h_k_szs, h_dils, causality=True, use_glu=use_glu)
-#        return None
-# 
-#    def forward(self, x):
-#        # Input={{x_sup,x_que};{label_sup,label_que}}  BxC*T (Bx(29+1)*20), audio feat dim=29, label dim=1, n_sup+n_que=20
-#        # Input bx30x20
-#        x = self.mlp(x) # bx128*20
-#        x = self.h_block(x) #bx256*20, 여기서 attention 쓰려면 split 128,128
-#        return x#x[:,:128,:]
         
 class SeqClassifier(nn.Module):
     def __init__(self, input_ch, e_ch,
