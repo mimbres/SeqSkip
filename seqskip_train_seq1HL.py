@@ -3,7 +3,7 @@
 """
 Created on Tue Dec 11 00:45:08 2018
 
-seq1H_genlog: seqeunce learning model 2stack conv enc
+seq1HL: seqeunce learning model, 256,512
 - q(x), l(x)
 - non-autoregressive (not feeding predicted labels)
 - instance Norm.
@@ -32,13 +32,13 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq1H_genlog128/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq1HL/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-spl","--use_suplog_as_feat", type=bool, default=True)
 parser.add_argument("-pl","--use_predicted_label", type=bool, default=False)
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
-parser.add_argument("-e","--epochs",type=int, default= 15)
+parser.add_argument("-e","--epochs",type=int, default= 10)
 parser.add_argument("-lr","--learning_rate", type=float, default = 0.001)
 parser.add_argument("-b","--train_batch_size", type=int, default = 2048)
 parser.add_argument("-tsb","--test_batch_size", type=int, default = 1024)
@@ -68,11 +68,6 @@ hist_trloss = list()
 hist_tracc  = list()
 hist_vloss  = list()
 hist_vacc   = list()
-
-hist_trloss_qlog = list()
-hist_trloss_skip = list()
-hist_vloss_qlog =  list()
-hist_vloss_skip =  list()
 np.set_printoptions(precision=3)
 
 class SeqFeatEnc(nn.Module):  
@@ -111,34 +106,26 @@ class SeqClassifier(nn.Module):
         self.front_1x1 = nn.Conv1d(input_ch, e_ch,1)
         self.h_block = HighwayDCBlock(h_io_chs, h_k_szs, h_dils, causality=True, use_glu=use_glu)
         self.last_1x1  = nn.Sequential(nn.Conv1d(e_ch,e_ch,1), nn.ReLU(),
-                                       nn.Conv1d(e_ch,e_ch,1), nn.ReLU())    
+                                       nn.Conv1d(e_ch,e_ch,1), nn.ReLU())
         self.classifier = nn.Sequential(nn.Conv1d(e_ch,e_ch,1), nn.ReLU(),
-                                        nn.Conv1d(e_ch,e_ch,1))#nn.Conv1d(e_ch,1,1))
+                                        nn.Conv1d(e_ch,1,1))
+
     def forward(self, x): # Input:bx256*20
         x = self.front_1x1(x) # bx128*20
         x = self.h_block(x)   # bx128*20
         x = self.last_1x1(x)  # bx64*20
         return self.classifier(x).squeeze(1) # bx20
-
-     
+        
 
 class SeqModel(nn.Module):
-    def __init__(self, input_dim=INPUT_DIM, e_ch=128, d_ch=128, use_glu=USE_GLU):
+    def __init__(self, input_dim=INPUT_DIM, e_ch=256, d_ch=512, use_glu=USE_GLU):
         super(SeqModel, self).__init__()
         self.enc = SeqFeatEnc(input_dim=input_dim, e_ch=e_ch, d_ch=d_ch, use_glu=use_glu)
         self.clf = SeqClassifier(input_ch=d_ch, e_ch=e_ch, use_glu=use_glu)
-        self.qlog_classifier = nn.Sequential(nn.Conv1d(e_ch,e_ch,1), nn.ReLU(),
-                                        nn.Conv1d(e_ch,41,1))#nn.Conv1d(e_ch,1,1))
-        self.skip_classifier = nn.Sequential(nn.Conv1d(e_ch,e_ch,1), nn.ReLU(),
-                                        nn.Conv1d(e_ch,1,1))#nn.Conv1d(e_ch,1,1))
         
     def forward(self, x):
-        x = self.enc(x) # bx128x20
-        x = self.clf(x) # bx128x20
-        #x_qlog, x_skip = x[:,:41,:], x[:,41,:] 
-        x_qlog = self.qlog_classifier(x) # bx41*20
-        x_skip = self.skip_classifier(x).squeeze(1) # bx20
-        return x_qlog, x_skip  
+        x = self.enc(x)
+        return self.clf(x)
 
 #%%
 
@@ -148,48 +135,32 @@ def validate(mval_loader, SM, eval_mode, GPU):
     submit = []
     gt     = []
     total_vloss    = 0
-    total_vloss_qlog = 0
-    total_vloss_skip = 0
     total_vcorrects = 0
     total_vquery    = 0
     val_sessions_iter = iter(mval_loader)
+    
     for val_session in trange(len(val_sessions_iter), desc='val-sessions', position=2, ascii=True):
         SM.eval()        
         x, labels, y_mask, num_items, index = val_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
-        
         # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
         num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
         num_query   = num_items[:,1].detach().numpy().flatten()
         batch_sz    = num_items.shape[0]
 
-        # x: bx70*20
-        x = x.permute(0,2,1)
-        
-        # Prepare ground truth log and label, y
-        y_qlog = x[:,:41,:].clone() # bx41*20
-        y_skip = labels.clone() #bx20
-        y_mask_qlog = y_mask.unsqueeze(1).repeat(1,41,1) #bx41*20
-        y_mask_skip = y_mask #bx20
+        x[:,10:,:41] = 0 # DELETE METALOG QUE
+        if USE_SUPLOG is False:
+                x = x[:,:,41:] # bx20*70(29)
+        labels_shift = torch.zeros(batch_sz,20,1)
+        labels_shift[:,1:,0] = labels[:,:-1].float()
+        labels_shift[:,11:,0] = 0 # REMOVE QUERY LABELS!
+        sq_state = torch.zeros(batch_sz,20,1)
+        sq_state[:,:11,0] = 1
+        # x: bx72(31)*20
+        x = torch.cat((x, labels_shift, sq_state), dim=2).permute(0,2,1).cuda(GPU)
 
-        # log shift: bx41*20
-        log_shift = torch.zeros(batch_sz,41,20)
-        log_shift[:,:,1:] = x[:,:41,:-1]
-        log_shift[:,:,11:] = 0 # DELETE LOG QUE
-        
-        # labels_shift: bx1*20(model can only observe past labels)
-        labels_shift = torch.zeros(batch_sz,1,20)
-        labels_shift[:,0,1:] = labels[:,:-1].float()
-        labels_shift[:,0,11:] = 0 #!!! NOLABEL for previous QUERY
-        
-        # support/query state labels: bx1*20
-        sq_state = torch.zeros(batch_sz,1,20)
-        sq_state[:,0,:11] = 1
-        # Pack x: bx72*20 (or bx32*20 if not using sup_logs)
-        x = torch.cat((x, labels_shift, sq_state), 1).cuda(GPU) # x: bx72*20
-        
         if USE_PRED_LABEL is True:
             # Predict
-            li = 70 # the label's dimension indice
+            li = 70 if USE_SUPLOG is True else 29 # the label's dimension indice
             _x = x[:,:,:11] # bx72*11
             for q in range(11,20):
                 y_hat = SM(Variable(_x, requires_grad=False)) # will be bx11 at the first round 
@@ -199,29 +170,21 @@ def validate(mval_loader, SM, eval_mode, GPU):
             y_hat = SM(Variable(_x, requires_grad=False)) # y_hat(final): bx20
             del _x
         else:
-            y_hat_qlog, y_hat_skip = SM(x) # y_hat: b*20
-            
+            y_hat = SM(x)
         # Calcultate BCE loss
-        loss_qlog = F.binary_cross_entropy_with_logits(input=y_hat_qlog.cuda(GPU)*y_mask_qlog.cuda(GPU),
-                                                       target=y_qlog.cuda(GPU)*y_mask_qlog.cuda(GPU))
-        loss_skip = F.binary_cross_entropy_with_logits(input=y_hat_skip.cuda(GPU)*y_mask_skip.cuda(GPU),
-                                                       target=y_skip.cuda(GPU)*y_mask_skip.cuda(GPU))
-        loss      = loss_qlog + loss_skip
-        total_vloss_qlog += loss_qlog.item()
-        total_vloss_skip += loss_skip.item()
+        loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask.cuda(GPU), target=labels.cuda(GPU)*y_mask.cuda(GPU))
         total_vloss += loss.item()
         
         # Decision
-        y_prob = torch.sigmoid(y_hat_skip.detach()*y_mask_skip.cuda(GPU)).cpu().numpy() # bx20               
+        y_prob = torch.sigmoid(y_hat*y_mask.cuda(GPU)).detach().cpu().numpy() # bx20               
         y_pred = (y_prob[:,10:]>=0.5).astype(np.int) # bx10
-        y_numpy = y_skip[:,10:].numpy() # bx10
+        y_numpy = labels[:,10:].numpy() # bx10
         # Acc
-        total_vcorrects += np.sum((y_pred==y_numpy)*y_mask_skip[:,10:].numpy())
+        y_query_mask = y_mask[:,10:].numpy()
+        total_vcorrects += np.sum((y_pred==y_numpy)*y_query_mask)
         total_vquery += np.sum(num_query)
         
-        # Restore GPU memory
-        del loss, loss_qlog, loss_skip, y_hat_qlog, y_hat_skip
-            
+        
         # Eval, Submission
         if eval_mode is not 0:
             for b in np.arange(batch_sz):
@@ -237,18 +200,15 @@ def validate(mval_loader, SM, eval_mode, GPU):
                        "Q:" + np.array2string(sample_que) + '\n' +
                        "P:" + np.array2string(sample_pred) + '\n' +
                        "prob:" + np.array2string(sample_prob))
-            tqdm.write("val_session:{0:}  vloss(qlog|skip):{1:.6f}({2:.6f}|{3:.6f})  vacc:{4:.4f}".format(val_session,
-                       total_vloss/total_vquery, total_vloss_qlog/total_vquery, 
-                       total_vloss_skip/total_vquery, total_vcorrects/total_vquery))
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
+        del loss, y_hat, x # Restore GPU memory
         
-    # Avg.Acc (skip labels only, log-generation acc is not implemented yet!)
+    # Avg.Acc
     if eval_mode==1:
         aacc = evaluate(submit, gt)
         tqdm.write("AACC={0:.6f}, FirstAcc={1:.6f}".format(aacc[0], aacc[1]))    
         
-    hist_vloss.append(total_vloss/total_vquery)
-    hist_vloss_qlog.append(total_vloss_qlog/total_vquery)
-    hist_vloss_skip.append(total_vloss_skip/total_vquery)
+    hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
     return submit
     
@@ -294,37 +254,27 @@ def main():
         tr_sessions_iter = iter(mtrain_loader)
         total_corrects = 0
         total_query    = 0
-        total_trloss_qlog = 0
-        total_trloss_skip = 0
         total_trloss   = 0
         for session in trange(len(tr_sessions_iter), desc='sessions', position=1, ascii=True):
             SM.train();
             x, labels, y_mask, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
-                        
+            
             # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
             num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
             num_query   = num_items[:,1].detach().numpy().flatten()
             batch_sz    = num_items.shape[0]
+            
+            # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
+            if USE_SUPLOG is False:
+                x = x[:,:,:30] # bx20*70(30)
 
-            # Prepare ground truth log and label, y
-            y_qlog = x[:,:,:41].permute(0,2,1) # bx41*20
-            y_skip = labels #bx20
-            y_mask_qlog = y_mask.unsqueeze(1).repeat(1,41,1) #bx41*20
-            y_mask_skip = y_mask #bx20
-            
-            # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.            
-            # log shift
-            x[:,1:,:41] = x[:,:-1,:41]
-            x[:,0, :41] = 0 
-            x[:,10:,:41] = 0 # DELETE LOG QUE
-            
+            x[:,10:,:41] = 0 # DELETE METALOG QUE
+
             # labels_shift: (model can only observe past labels)
             labels_shift = torch.zeros(batch_sz,20,1)
             labels_shift[:,1:,0] = labels[:,:-1].float()
-            labels_shift[:,:,0] = labels[:,:].float()
             #!!! NOLABEL for previous QUERY
             labels_shift[:,11:,0] = 0
-            
             # support/query state labels
             sq_state = torch.zeros(batch_sz,20,1)
             sq_state[:,:11,0] = 1
@@ -332,16 +282,9 @@ def main():
             x = Variable(torch.cat((x, labels_shift, sq_state), 2).permute(0,2,1)).cuda(GPU) # x: bx72*20
   
             # Forward & update
-            y_hat_qlog, y_hat_skip = SM(x) # y_hat: b*20
-            
+            y_hat = SM(x) # y_hat: b*20
             # Calcultate BCE loss
-            loss_qlog = F.binary_cross_entropy_with_logits(input=y_hat_qlog.cuda(GPU)*y_mask_qlog.cuda(GPU),
-                                                           target=y_qlog.cuda(GPU)*y_mask_qlog.cuda(GPU))
-            loss_skip = F.binary_cross_entropy_with_logits(input=y_hat_skip.cuda(GPU)*y_mask_skip.cuda(GPU),
-                                                           target=y_skip.cuda(GPU)*y_mask_skip.cuda(GPU))
-            loss      = loss_qlog + loss_skip
-            total_trloss_qlog += loss_qlog.item()
-            total_trloss_skip += loss_skip.item()
+            loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask.cuda(GPU), target=labels.cuda(GPU)*y_mask.cuda(GPU))
             total_trloss += loss.item()
             SM.zero_grad()
             loss.backward()
@@ -350,23 +293,18 @@ def main():
             SM_optim.step()
             
             # Decision
-            y_prob = torch.sigmoid(y_hat_skip.detach()*y_mask_skip.cuda(GPU)).cpu().numpy() # bx20               
+            y_prob = torch.sigmoid(y_hat*y_mask.cuda(GPU)).detach().cpu().numpy() # bx20               
             y_pred = (y_prob[:,10:]>=0.5).astype(np.int) # bx10
-            y_numpy = y_skip[:,10:].numpy() # bx10
-            
-            # Label Acc*
-            total_corrects += np.sum((y_pred==y_numpy)*y_mask_skip[:,10:].numpy())
+            y_numpy = labels[:,10:].numpy() # bx10
+            # Acc
+            y_query_mask = y_mask[:,10:].numpy()
+            total_corrects += np.sum((y_pred==y_numpy)*y_query_mask)
             total_query += np.sum(num_query)
-#            # Log generation Acc*
-#            y_qlog_mask = y_mask[:,:41,10:]
-            
             # Restore GPU memory
-            del loss, loss_qlog, loss_skip, y_hat_qlog, y_hat_skip 
+            del loss, y_hat 
     
             if (session+1)%500 == 0:
-                hist_trloss_qlog.append(total_trloss_qlog/500) #!
-                hist_trloss_skip.append(total_trloss_skip/500) #!
-                hist_trloss.append(total_trloss/500)
+                hist_trloss.append(total_trloss/900)
                 hist_tracc.append(total_corrects/total_query)
                 # Prepare display
                 sample_sup = labels[0,:num_support[0]].long().numpy().flatten() 
@@ -377,27 +315,23 @@ def main():
                            "Q:" + np.array2string(sample_que) + '\n' +
                            "P:" + np.array2string(sample_pred) + '\n' +
                            "prob:" + np.array2string(sample_prob))
-                tqdm.write("tr_session:{0:}  tr_loss(qlog|skip):{1:.6f}({2:.6f}|{3:.6f})  tr_acc:{4:.4f}".format(session,
-                           hist_trloss[-1], hist_trloss_qlog[-1], hist_trloss_skip[-1], hist_tracc[-1]))
+                tqdm.write("tr_session:{0:}  tr_loss:{1:.6f}  tr_acc:{2:.4f}".format(session, hist_trloss[-1], hist_tracc[-1]))
                 total_corrects = 0
                 total_query    = 0
                 total_trloss   = 0
-                total_trloss_qlog   = 0
-                total_trloss_skip   = 0
+                
             
             if (session+1)%20000 == 0:
                  # Validation
                  validate(mval_loader, SM, eval_mode=True)
                  # Save
-                 torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 
-                             'hist_trloss_qlog': hist_trloss_qlog, 'hist_trloss_skip': hist_trloss_skip,  'hist_vacc': hist_vacc,
+                 torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
                              'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
                              'SM_sch_state': SM_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
         # Validation
         validate(mval_loader, SM, eval_mode=True)
         # Save
-        torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1],
-                    'hist_trloss_qlog': hist_trloss_qlog, 'hist_trloss_skip': hist_trloss_skip,  'hist_vacc': hist_vacc,
+        torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
                     'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
                     'SM_sch_state': SM_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
         SM_scheduler.step()

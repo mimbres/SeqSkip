@@ -16,8 +16,8 @@ from spotify_data_loader import SpotifyDataloader
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
-parser.add_argument("-m","--model_py", type = str, default="./seqskip_train_seq1H_genlog128.py")
-parser.add_argument("-s","--save_path",type = str, default="./save/exp_seq1H_genlog128/check_1_39999.pth") # directory of saved checkpoint
+parser.add_argument("-m","--model_py", type = str, default="./seqskip_train_seq1HL.py")
+parser.add_argument("-s","--save_path",type = str, default="./save/exp_seq1HL/check_3_48811.pth") # directory of saved checkpoint
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-g","--gpu",type=int, default=0)
 args = parser.parse_args()
@@ -34,19 +34,19 @@ SUBMISSION_OUTPUT_PATH = os.path.dirname(CHECKPOINT_PATH)
 
 # TSSET stats: 518275860 items within 31251398 sessions
 print('Initializing dataloader...')
-#mtest_loader  = SpotifyDataloader(config_fpath=args.config,
-#                                  mtrain_mode=False, # False = testset for submission
-#                                  #data_sel=(0, 100),
-#                                  batch_size=4096,
-#                                  shuffle=False,
-#                                  seq_mode=True) 
-
 mtest_loader  = SpotifyDataloader(config_fpath=args.config,
-                                  mtrain_mode=True, # True, because we use part of trainset as testset
-                                  data_sel=(99965071, 110075071),#(99965071, 124950714), # 20%를 테스트
-                                  batch_size=10,
-                                  shuffle=True,
+                                  mtrain_mode=False, # False = testset for submission
+                                  #data_sel=(0, 100),
+                                  batch_size=4096,
+                                  shuffle=False,
                                   seq_mode=True) 
+
+#mtest_loader  = SpotifyDataloader(config_fpath=args.config,
+#                                  mtrain_mode=True, # True, because we use part of trainset as testset
+#                                  data_sel=(99965071, 110075071),#(99965071, 124950714), # 20%를 테스트
+#                                  batch_size=10,
+#                                  shuffle=True,
+#                                  seq_mode=True) 
 
 def save_submission(output, output_path):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
