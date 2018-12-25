@@ -17,7 +17,7 @@ from spotify_data_loader import SpotifyDataloader
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type = str, default = "./config_init_dataset.json")
 parser.add_argument("-m","--model_py", type = str, default="./seqskip_train_seq1H_genlog128.py")
-parser.add_argument("-s","--save_path",type = str, default="./save/exp_seq1H_genlog128/check_1_48811.pth") # directory of saved checkpoint
+parser.add_argument("-s","--save_path",type = str, default="./save/exp_seq1H_genlog128/check_1_39999.pth") # directory of saved checkpoint
 parser.add_argument("-w","--class_num",type = int, default = 2)
 parser.add_argument("-g","--gpu",type=int, default=0)
 args = parser.parse_args()
