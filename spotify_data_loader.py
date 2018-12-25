@@ -134,15 +134,15 @@ class SpotifyDataset(Dataset):
             # [0,..28] : track features 
             feats_sup[:_num_sup, :]  = self.track_feat[track_ids_sup, :]
             feats_que[:_num_que, :]  = self.track_feat[track_ids_que, :]
-    
+
             # Fill out the logs dimensions as:
             # [0]       : minmax-scaled date in the range of -1 to 1
             # [1,...8] : n_seekfwd, n_seekback, skip_1,2,3, hist_sh, ct_swc, no_p, s_p, l_p, premium
             # [9,..40] : one-hot-encoded categorical labels of context_type, bh_start, bh_end 
-            logs_sup[:_num_sup, 0] = (session_log_sup[:, 8]/24)+0.042# 시간: 0.042~1로 normalize..(session_log_sup[:, 8] / 23) * 2 - 1
-            logs_sup[:_num_que, 0] = (session_log_que[:, 8]/24)+0.042
-            logs_sup[:_num_sup, 1] = np.log(session_log_sup[:, 9]+2) / np.log(255+2)  # n_seekfwd: Normalized to 0.125~1 in log-scale
-            logs_que[:_num_que, 1] = np.log(session_log_que[:, 10]+2) / np.log(255+2) # n_seekback: Normalized to 0.125~1 in log-scale
+            logs_sup[:_num_sup, 0] = (session_log_sup[:, 8].astype(np.float32)/24)+0.042# 시간: 0.042~1로 normalize..(session_log_sup[:, 8] / 23) * 2 - 1
+            logs_sup[:_num_que, 0] = (session_log_que[:, 8].astype(np.float32)/24)+0.042
+            logs_sup[:_num_sup, 1] = np.log(session_log_sup[:, 9].astype(np.float32)+2) / np.log(255+2)  # n_seekfwd: Normalized to 0.125~1 in log-scale
+            logs_que[:_num_que, 1] = np.log(session_log_que[:, 10].astype(np.float32)+2) / np.log(255+2) # n_seekback: Normalized to 0.125~1 in log-scale
             logs_sup[:_num_sup, 2] = session_log_sup[:, 10]
             logs_que[:_num_que, 2] = session_log_que[:, 10]
             logs_sup[:_num_sup, 3:9] = session_log_sup[:, [14,15,16,17,18,19]]
@@ -180,9 +180,9 @@ class SpotifyDataset(Dataset):
             # [41,..69] : track features
             lzs = int(10 - _num_sup) # number of left zeros for padding             
             n_item = np.sum(num_items)
-            feats[lzs:lzs+n_item, 0]   = (session_log[:, 8]/24)+0.042# 시간: 0.042~1로 normalize..(session_log[:, 8] / 23) * 2 - 1
-            feats[lzs:lzs+n_item, 1]   = np.log(session_log[:, 9]+2) / np.log(255+2)  # n_seekfwd: Normalized to 0.125~1 in log-scale
-            feats[lzs:lzs+n_item, 2]   = np.log(session_log[:, 10]+2) / np.log(255+2) # n_seekback: Normalized to 0.125~1 in log-scale
+            feats[lzs:lzs+n_item, 0]   = (session_log[:, 8]/24).astype(np.float32)+0.042# 시간: 0.042~1로 normalize..(session_log[:, 8] / 23) * 2 - 1
+            feats[lzs:lzs+n_item, 1]   = np.log(session_log[:, 9].astype(np.float32)+2) / np.log(255+2)  # n_seekfwd: Normalized to 0.125~1 in log-scale
+            feats[lzs:lzs+n_item, 2]   = np.log(session_log[:, 10].astype(np.float32)+2) / np.log(255+2) # n_seekback: Normalized to 0.125~1 in log-scale
             feats[lzs:lzs+n_item, 3:9]   = session_log[:, [14,15,16,17,18,19]]
             feats[lzs:lzs+n_item, 9:15]  = indices_to_one_hot(data=session_log[:,20], nb_classes=6)
             feats[lzs:lzs+n_item, 15:28] = indices_to_one_hot(data=session_log[:,21], nb_classes=13)
