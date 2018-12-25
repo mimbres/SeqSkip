@@ -143,7 +143,7 @@ class SeqModel(nn.Module):
 #%%
 
 
-def validate(mval_loader, SM, eval_mode):
+def validate(mval_loader, SM, eval_mode, GPU):
     tqdm.write("Validation...")
     submit = []
     gt     = []

@@ -143,7 +143,7 @@ class SeqModel(nn.Module):
 #%%
 
 
-def validate(mval_loader, SM, eval_mode):
+def validate(mval_loader, SM, eval_mode, GPU):
     tqdm.write("Validation...")
     submit = []
     gt     = []
@@ -185,7 +185,7 @@ def validate(mval_loader, SM, eval_mode):
         sq_state[:,:11,0] = 1
         # Pack x: bx72*20 (or bx32*20 if not using sup_logs)
         x = torch.cat((x, labels_shift, sq_state), 2).permute(0,2,1).cuda(GPU) # x: bx72*20
-
+        
         if USE_PRED_LABEL is True:
             # Predict
             li = 70 # the label's dimension indice

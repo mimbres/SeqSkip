@@ -74,7 +74,7 @@ def main():
     SM.load_state_dict(checkpoint['SM_state'])
 
     # Test
-    submission = validate(mtest_loader, SM, eval_mode=2)
+    submission = validate(mtest_loader, SM, eval_mode=2, GPU=GPU)
     if len(submission)!=31251398: print("WARNING: submission size not matches.");
 
     # Save
