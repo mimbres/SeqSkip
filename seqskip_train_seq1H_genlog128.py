@@ -10,6 +10,7 @@ seq1H_genlog: seqeunce learning model 2stack conv enc
 - G: GLU version
 - H: Highway-net version
 
+기존 버그 완전 수정!
 
 @author: mimbres
 """
@@ -184,22 +185,24 @@ def validate(mval_loader, SM, eval_mode, GPU):
         # support/query state labels: bx1*20
         sq_state = torch.zeros(batch_sz,1,20)
         sq_state[:,0,:11] = 1
+        
         # Pack x: bx72*20 (or bx32*20 if not using sup_logs)
-        x = torch.cat((x, labels_shift, sq_state), 1).cuda(GPU) # x: bx72*20
+        x = torch.cat((log_shift, x[:,41:,:], labels_shift, sq_state), 1).cuda(GPU) # x: bx72*20
         
         if USE_PRED_LABEL is True:
             # Predict
             li = 70 # the label's dimension indice
-            _x = x[:,:,:11] # bx72*11
+            _x = x[:,:,:11].clone() # bx72*11
             for q in range(11,20):
-                y_hat = SM(Variable(_x, requires_grad=False)) # will be bx11 at the first round 
+                y_hat_qlog, y_hat_skip = SM(Variable(_x, requires_grad=False)) # will be bx11 at the first round 
                 # Append next features
                 _x = torch.cat((_x, x[:,:,q].unsqueeze(2)), 2) # now bx72*12
-                _x[:,li,q] = torch.sigmoid(y_hat[:,-1])
-            y_hat = SM(Variable(_x, requires_grad=False)) # y_hat(final): bx20
+                _x[:,li,q] = torch.sigmoid(y_hat_skip[:,-1]) # replace with predicted label
+                _x[:,:41,q] = torch.sigmoid(y_hat_qlog[:,-1])
+            y_hat_qlog, y_hat_skip = SM(Variable(_x, requires_grad=False)) # y_hat(final): bx20
             del _x
         else:
-            y_hat_qlog, y_hat_skip = SM(x) # y_hat: b*20
+            y_hat_qlog, y_hat_skip = SM(x) # y_hat_qlog: bx41*20, y_hat_skip: b*20
             
         # Calcultate BCE loss
         loss_qlog = F.binary_cross_entropy_with_logits(input=y_hat_qlog.cuda(GPU)*y_mask_qlog.cuda(GPU),
@@ -266,7 +269,7 @@ def main():
     
     mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True, # True, because we use part of trainset as testset
-                                      data_sel=(99965071, 104965071),#(99965071, 124950714), # 20%를 테스트
+                                      data_sel=(99965071, 101065071),#104965071),#(99965071, 124950714), # 20%를 테스트
                                       batch_size=TS_BATCH_SZ,
                                       shuffle=False,
                                       seq_mode=True) 
@@ -300,36 +303,37 @@ def main():
         for session in trange(len(tr_sessions_iter), desc='sessions', position=1, ascii=True):
             SM.train();
             x, labels, y_mask, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
-                        
+            
             # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
             num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
             num_query   = num_items[:,1].detach().numpy().flatten()
             batch_sz    = num_items.shape[0]
-
+    
+            # x: bx70*20
+            x = x.permute(0,2,1)
+            
             # Prepare ground truth log and label, y
-            y_qlog = x[:,:,:41].permute(0,2,1) # bx41*20
-            y_skip = labels #bx20
+            y_qlog = x[:,:41,:].clone() # bx41*20
+            y_skip = labels.clone() #bx20
             y_mask_qlog = y_mask.unsqueeze(1).repeat(1,41,1) #bx41*20
             y_mask_skip = y_mask #bx20
+    
+            # log shift: bx41*20
+            log_shift = torch.zeros(batch_sz,41,20)
+            log_shift[:,:,1:] = x[:,:41,:-1]
+            log_shift[:,:,11:] = 0 # DELETE LOG QUE
             
-            # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.            
-            # log shift
-            x[:,1:,:41] = x[:,:-1,:41]
-            x[:,0, :41] = 0 
-            x[:,10:,:41] = 0 # DELETE LOG QUE
+            # labels_shift: bx1*20(model can only observe past labels)
+            labels_shift = torch.zeros(batch_sz,1,20)
+            labels_shift[:,0,1:] = labels[:,:-1].float()
+            labels_shift[:,0,11:] = 0 #!!! NOLABEL for previous QUERY
             
-            # labels_shift: (model can only observe past labels)
-            labels_shift = torch.zeros(batch_sz,20,1)
-            labels_shift[:,1:,0] = labels[:,:-1].float()
-            labels_shift[:,:,0] = labels[:,:].float()
-            #!!! NOLABEL for previous QUERY
-            labels_shift[:,11:,0] = 0
+            # support/query state labels: bx1*20
+            sq_state = torch.zeros(batch_sz,1,20)
+            sq_state[:,0,:11] = 1
             
-            # support/query state labels
-            sq_state = torch.zeros(batch_sz,20,1)
-            sq_state[:,:11,0] = 1
             # Pack x: bx72*20 (or bx32*20 if not using sup_logs)
-            x = Variable(torch.cat((x, labels_shift, sq_state), 2).permute(0,2,1)).cuda(GPU) # x: bx72*20
+            x = Variable(torch.cat((log_shift, x[:,41:,:], labels_shift, sq_state), 1)).cuda(GPU) # x: bx72*20
   
             # Forward & update
             y_hat_qlog, y_hat_skip = SM(x) # y_hat: b*20
@@ -385,16 +389,16 @@ def main():
                 total_trloss_qlog   = 0
                 total_trloss_skip   = 0
             
-            if (session+1)%20000 == 0:
+            if (session+1)%8000 == 0:
                  # Validation
-                 validate(mval_loader, SM, eval_mode=True)
+                 validate(mval_loader, SM, eval_mode=True, GPU=GPU)
                  # Save
                  torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 
                              'hist_trloss_qlog': hist_trloss_qlog, 'hist_trloss_skip': hist_trloss_skip,  'hist_vacc': hist_vacc,
                              'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
                              'SM_sch_state': SM_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
         # Validation
-        validate(mval_loader, SM, eval_mode=True)
+        validate(mval_loader, SM, eval_mode=True, GPU=GPU)
         # Save
         torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1],
                     'hist_trloss_qlog': hist_trloss_qlog, 'hist_trloss_skip': hist_trloss_skip,  'hist_vacc': hist_vacc,
