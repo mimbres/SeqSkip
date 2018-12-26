@@ -3,7 +3,7 @@
 """
 Created on Tue Dec 11 00:45:08 2018
 
-seq1H: seqeunce learning model
+seq1H: seqeunce learning model ONLY 1 Enc (256)
 - q(x), l(x)
 - non-autoregressive (not feeding predicted labels)
 - instance Norm.
@@ -32,7 +32,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq1H_halfv2/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq1eH_halfv2/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-spl","--use_suplog_as_feat", type=bool, default=True)
 parser.add_argument("-pl","--use_predicted_label", type=bool, default=False)
@@ -69,38 +69,11 @@ hist_tracc  = list()
 hist_vloss  = list()
 hist_vacc   = list()
 np.set_printoptions(precision=3)
-
-class SeqFeatEnc(nn.Module):  
-    def __init__(self, input_dim, e_ch, #d_ch=256,
-                 #h_io_chs=[256, 256, 256, 256, 256, 256, 256],
-                 d_ch,
-                 h_io_chs=[1,1,1,1,1],
-                 h_k_szs=[2,3,3,1,1],
-                 h_dils=[1,2,3,1,1],
-#                 h_io_chs=[1,1,1,1,1,1,1],
-#                 h_k_szs=[2,2,2,2,2,1,1],
-#                 h_dils=[1,2,4,8,16,1,1],
-                 use_glu=False):
-        super(SeqFeatEnc, self).__init__()
-        h_io_chs[:] = [n * e_ch for n in h_io_chs]
-        # Layers:
-        self.mlp = nn.Sequential(nn.Conv1d(input_dim,e_ch,1),
-                                 nn.ReLU(),
-                                 nn.Conv1d(e_ch,d_ch,1))
-        self.h_block = HighwayDCBlock(h_io_chs, h_k_szs, h_dils, causality=True, use_glu=use_glu)
-        return None
- 
-    def forward(self, x):
-        # Input={{x_sup,x_que};{label_sup,label_que}}  BxC*T (Bx(29+1)*20), audio feat dim=29, label dim=1, n_sup+n_que=20
-        # Input bx30x20
-        x = self.mlp(x) # bx128*20
-        x = self.h_block(x) #bx256*20, 여기서 attention 쓰려면 split 128,128
-        return x#x[:,:128,:]
-        
+       
 class SeqClassifier(nn.Module):
     def __init__(self, input_ch, e_ch,
                  h_io_chs=[1,1,1,1,1,1],
-                 h_k_szs=[2,3,2,2,1,1],
+                 h_k_szs=[2,2,3,2,1,1],
                  h_dils=[1,2,5,10,1,1],
                  use_glu=False):
         super(SeqClassifier, self).__init__()
@@ -120,13 +93,14 @@ class SeqClassifier(nn.Module):
         
 
 class SeqModel(nn.Module):
-    def __init__(self, input_dim=INPUT_DIM, e_ch=128, d_ch=128, use_glu=USE_GLU):
+    def __init__(self, input_dim=INPUT_DIM, e_ch=256, d_ch=256, use_glu=USE_GLU):
         super(SeqModel, self).__init__()
-        self.enc = SeqFeatEnc(input_dim=input_dim, e_ch=e_ch, d_ch=d_ch, use_glu=use_glu)
-        self.clf = SeqClassifier(input_ch=d_ch, e_ch=e_ch, use_glu=use_glu)
+        #self.enc = SeqFeatEnc(input_dim=input_dim, e_ch=e_ch, d_ch=d_ch, use_glu=use_glu)
+        #self.clf = SeqClassifier(input_ch=d_ch, e_ch=e_ch, use_glu=use_glu)
+        self.clf = SeqClassifier(input_ch=input_dim, e_ch=e_ch, use_glu=use_glu)
         
     def forward(self, x):
-        x = self.enc(x)
+        #x = self.enc(x)
         return self.clf(x)
 
 #%%
@@ -174,8 +148,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
         else:
             y_hat = SM(x)
         # Calcultate BCE loss
-        loss = F.binary_cross_entropy_with_logits(input=y_hat[:,10:]*y_mask[:,10:].cuda(GPU),
-                                                  target=labels[:,10:].cuda(GPU)*y_mask[:,10:].cuda(GPU))
+        loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask.cuda(GPU), target=labels.cuda(GPU)*y_mask.cuda(GPU))
         total_vloss += loss.item()
         
         # Decision
@@ -209,7 +182,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
     # Avg.Acc
     if eval_mode==1:
         aacc = evaluate(submit, gt)
-        tqdm.write("AACC={0:.6f}, FirstAcc={1:.6f}".format(aacc[0], aacc[1]))    
+        tqdm.write("AACC={0:.6f}, FirstAcc={1:.6f}".format(aacc[0], aacc[1]))     
         
     hist_vloss.append(total_vloss/val_session)
     hist_vacc.append(total_vcorrects/total_vquery)
@@ -260,7 +233,7 @@ def main():
         total_trloss   = 0
         for session in trange(len(tr_sessions_iter), desc='sessions', position=1, ascii=True):
             SM.train();
-            x, labels, y_mask, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
+            x, labels, y_mask, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS 
             
             # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
             num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
@@ -287,9 +260,7 @@ def main():
             # Forward & update
             y_hat = SM(x) # y_hat: b*20
             # Calcultate BCE loss
-            # HALF
-            loss = F.binary_cross_entropy_with_logits(input=y_hat[:,10:]*y_mask[:,10:].cuda(GPU),
-                                                      target=labels[:,10:].cuda(GPU)*y_mask[:,10:].cuda(GPU))
+            loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask.cuda(GPU), target=labels.cuda(GPU)*y_mask.cuda(GPU))
             total_trloss += loss.item()
             SM.zero_grad()
             loss.backward()
