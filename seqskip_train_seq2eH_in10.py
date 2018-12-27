@@ -94,7 +94,7 @@ class SeqEncoder(nn.Module):
         
 
 class SeqModel(nn.Module):
-    def __init__(self, input_dim_s=INPUT_DIM_S, input_dim_q=INPUT_DIM_Q, e_ch=64, d_ch=128, use_glu=USE_GLU):
+    def __init__(self, input_dim_s=INPUT_DIM_S, input_dim_q=INPUT_DIM_Q, e_ch=128, d_ch=256, use_glu=USE_GLU):
         super(SeqModel, self).__init__()
         self.e_ch = e_ch
         self.d_ch = d_ch
@@ -104,9 +104,6 @@ class SeqModel(nn.Module):
                                         nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
                                         nn.Conv1d(d_ch,1,1))
         
-        # internal variables
-        self.att = torch.FloatTensor(2048,10,10)
-        self.x   = torch.FloatTensor(2048,256,10)
         
     def forward(self, x_sup, x_que):
         x_sup = self.sup_enc(x_sup) # bx256*10 
