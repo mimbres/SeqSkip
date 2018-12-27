@@ -72,9 +72,9 @@ np.set_printoptions(precision=3)
        
 class SeqClassifier(nn.Module):
     def __init__(self, input_ch, e_ch,
-                 h_io_chs=[1,1,1,1,1,1,1,1,1],
-                 h_k_szs=[2,1,2,1,3,1,2,1,1],
-                 h_dils=[1,1,2,1,5,1,10,1,1],
+                 h_io_chs=[1,1,1,1,1],
+                 h_k_szs=[2,2,5,1,1],
+                 h_dils=[1,2,4,1,1],,
                  use_glu=False):
         super(SeqClassifier, self).__init__()
         h_io_chs[:] = [n * e_ch for n in h_io_chs]
