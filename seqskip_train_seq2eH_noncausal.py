@@ -32,7 +32,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq2eH_in20/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq2eH_noncausal/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-spl","--use_suplog_as_feat", type=bool, default=True)
 parser.add_argument("-qf","--use_quelog_as_feat", type=bool, default=False)
