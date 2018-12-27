@@ -232,7 +232,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
                 gt.append(y_numpy[b,:num_query[b]].flatten())
                 
         if (val_session+1)%400 == 0:
-            sample_sup = labels[0,:num_support[0]].long().numpy().flatten() 
+            sample_sup = labels[0,(10-num_support[0]):10].long().numpy().flatten() 
             sample_que = y_numpy[0,:num_query[0]].astype(int)
             sample_pred = y_pred[0,:num_query[0]]
             sample_prob = y_prob[0,10:10+num_query[0]]
@@ -373,7 +373,7 @@ def main():
                 hist_trloss.append(total_trloss/500)
                 hist_tracc.append(total_corrects/total_query)
                 # Prepare display
-                sample_sup = labels[0,:num_support[0]].long().numpy().flatten() 
+                sample_sup = labels[0,(10-num_support[0]):10].long().numpy().flatten() 
                 sample_que = y_numpy[0,:num_query[0]].astype(int)
                 sample_pred = y_pred[0,:num_query[0]]
                 sample_prob = y_prob[0,10:10+num_query[0]]

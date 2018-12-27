@@ -21,7 +21,6 @@ class HighwayLayer(nn.Module):
         self.dil       = dil
         self.causality = causality   
         self.use_glu   = use_glu
-        
         self.L = nn.Conv1d(in_ch, out_ch*2, kernel_size=k_sz, dilation=dil)
         self.inorm = nn.InstanceNorm1d(out_ch*2)
         if self.use_glu is True:
