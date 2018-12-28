@@ -79,11 +79,12 @@ class SeqEncoder(nn.Module):
     def __init__(self, input_ch, e_ch,
                  h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,5,1,1],
                  h_dils=[1,2,4,8,1,1],
+                 causality=True
                  use_glu=False):
         super(SeqEncoder, self).__init__()
         h_io_chs = [e_ch]*len(h_k_szs)
         self.front_1x1 = nn.Conv1d(input_ch, e_ch,1)
-        self.h_block = HighwayDCBlock(h_io_chs, h_k_szs, h_dils, causality=True, use_glu=use_glu)
+        self.h_block = HighwayDCBlock(h_io_chs, h_k_szs, h_dils, causality=causality, use_glu=use_glu)
         self.mid_1x1  = nn.Sequential(nn.Conv1d(e_ch,e_ch,1), nn.ReLU(),
                                        nn.Conv1d(e_ch,e_ch,1), nn.ReLU())
         self.last_1x1 = nn.Sequential(nn.Conv1d(e_ch,e_ch,1))
@@ -103,6 +104,7 @@ class SeqModel(nn.Module):
         self.sup_enc = SeqEncoder(input_ch=input_dim_s, e_ch=d_ch, 
                                   h_k_szs=[3,3,3],
                                   h_dils=[1,3,9],
+                                  causality=False,
                                   use_glu=use_glu) # bx256*10 
         self.que_enc = SeqEncoder(input_ch=input_dim_q, e_ch=e_ch,
                                   h_k_szs=[2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],

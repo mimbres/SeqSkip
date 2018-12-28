@@ -34,7 +34,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq2eH_in20/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq2eH_in20_norm/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-spl","--use_suplog_as_feat", type=bool, default=True)
 parser.add_argument("-qf","--use_quelog_as_feat", type=bool, default=True)
@@ -79,7 +79,7 @@ class SeqEncoder(nn.Module):
     def __init__(self, input_ch, e_ch,
                  h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,5,1,1],
                  h_dils=[1,2,4,8,1,1],
-                 causality=True,
+                 causality=True
                  use_glu=False):
         super(SeqEncoder, self).__init__()
         h_io_chs = [e_ch]*len(h_k_szs)
@@ -110,6 +110,12 @@ class SeqModel(nn.Module):
                                   h_k_szs=[2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
                                   h_dils=[1,2,4,1,1], #h_dils=[1,2,4,8,1,1],
                                   use_glu=use_glu) # bx128*10
+        self.mid_enc = SeqEncoder(input_ch=input_dim_q, e_ch=e_ch,
+                                  h_k_szs=[2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
+                                  h_dils=[1,2,4,1,1], #h_dils=[1,2,4,8,1,1],
+                                  use_glu=use_glu)
+        
+        
         self.classifier = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
                                         nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
                                         nn.Conv1d(d_ch,1,1))
@@ -121,7 +127,7 @@ class SeqModel(nn.Module):
         
         # Attention: K,V from x_sup, Q from x_que
         x_sup = torch.split(x_sup, self.e_ch, dim=1) # K: x_sup[0], V: x_sup[1]
-        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2), x_que), dim=2) # K'*Q: bx10*20
+        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2)/16, x_que), dim=2) # K'*Q: bx10*20
         x = torch.cat((torch.matmul(x_sup[1], att), x_que), 1) # {V*att, Q}: bx(128+128)*10     
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
         return x, att # bx20, bx10x20
