@@ -277,7 +277,7 @@ def main():
     # Init neural net
     SM = SeqModel().cuda(GPU)
     SM_optim = torch.optim.Adam(SM.parameters(), lr=LEARNING_RATE)
-    SM_scheduler = StepLR(SM_optim, step_size=1, gamma=0.7)  
+    SM_scheduler = StepLR(SM_optim, step_size=1, gamma=0.8)  
     
     # Load checkpoint
     if args.load_continue_latest is None:

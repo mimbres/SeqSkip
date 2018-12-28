@@ -3,13 +3,15 @@
 """
 Created on Tue Dec 11 00:45:08 2018
 
-seq2eH: seqeunce learning model with separate encoder for support and query, 1stack each 
+seq2eH_in20: seqeunce learning model with separate encoder for support and query, 1stack each 
 - non-autoregressive (not feeding predicted labels)
 - instance Norm.
 - G: GLU version
 - H: Highway-net version
 - applied more efficient dilated conv over seq1
-
+- non-causal for sup
+- using sup+query as input (20)
+-
 
 @author: mimbres
 """
@@ -35,7 +37,7 @@ parser.add_argument("-c","--config",type=str, default="./config_init_dataset.jso
 parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq2eH_in20/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-spl","--use_suplog_as_feat", type=bool, default=True)
-parser.add_argument("-qf","--use_quelog_as_feat", type=bool, default=False)
+parser.add_argument("-qf","--use_quelog_as_feat", type=bool, default=True)
 parser.add_argument("-pl","--use_predicted_label", type=bool, default=False)
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
@@ -53,7 +55,7 @@ USE_QUELOG = args.use_quelog_as_feat
 USE_PRED_LABEL = args.use_predicted_label
 USE_GLU    = args.use_glu
 INPUT_DIM_S = 71 if USE_SUPLOG else 30 # default: 72
-INPUT_DIM_Q = 71 if USE_QUELOG else 29 # default: 31
+INPUT_DIM_Q = 72 if USE_QUELOG else 29 # default: 31
 
 CLASS_NUM = args.class_num
 EPOCHS = args.epochs
@@ -117,10 +119,10 @@ class SeqModel(nn.Module):
         
         # Attention: K,V from x_sup, Q from x_que
         x_sup = torch.split(x_sup, self.e_ch, dim=1) # K: x_sup[0], V: x_sup[1]
-        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2), x_que), dim=2) # K'*Q: bx10*10
+        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2), x_que), dim=2) # K'*Q: bx10*20
         x = torch.cat((torch.matmul(x_sup[1], att), x_que), 1) # {V*att, Q}: bx(128+128)*10     
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
-        return x, att # bx10, bx10x10
+        return x, att # bx20, bx10x20
 
 #%%
 
@@ -145,16 +147,23 @@ def validate(mval_loader, SM, eval_mode, GPU):
         # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
         x = x.permute(0,2,1) # bx70*20
         x_sup = Variable(torch.cat((x[:,:,:10], labels[:,:10].unsqueeze(1)), 1)).cuda(GPU) # bx71(41+29+1)*10 
-        x_que = Variable(x[:,41:,10:].clone()).cuda(GPU) # bx29*10
+        
+        x_que = torch.zeros(batch_sz, 72, 20)
+        x_que[:,:41,:10] = x[:,:41,:10].clone() # fill with x_sup_log
+        x_que[:,41:70,:] = x[:,41:,:].clone()   # fill with x_sup_feat and x_que_feat
+        x_que[:, 70,:10] = 1                    # support marking
+        x_que[:, 71,:10] = labels[:,:10].unsqueeze(1) # labels marking
+        x_que = Variable(x_que).cuda(GPU) # bx29*10
 
         # y 
-        y_que = labels[:,10:].clone() # bx10
+        y = labels.clone() # bx20
         
         # y_mask
-        y_mask_que = y_mask[:,10:].clone()
-
+        y_mask_que = y_mask.clone()
+        y_mask_que[:,:10] = 0
+        
         # Forward & update
-        y_hat_que, att = SM(x_sup, x_que) # y_hat_que: b*10, att: bx10*10
+        y_hat, att = SM(x_sup, x_que) # y_hat: b*20, att: bx10*20
 
 #        if USE_PRED_LABEL is True:
 #            # Predict
@@ -170,16 +179,16 @@ def validate(mval_loader, SM, eval_mode, GPU):
 #        else:
 #            y_hat = SM(x)
         
-        # Calcultate BCE loss
-        loss = F.binary_cross_entropy_with_logits(input=y_hat_que*y_mask_que.cuda(GPU), target=y_que.cuda(GPU)*y_mask_que.cuda(GPU))
+        # Calcultate BCE loss: 뒤에q만 봄
+        loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask_que.cuda(GPU), target=y.cuda(GPU)*y_mask_que.cuda(GPU))
         total_vloss += loss.item()
         
         # Decision
-        y_prob = torch.sigmoid(y_hat_que*y_mask_que.cuda(GPU)).detach().cpu().numpy() # bx20               
-        y_pred = (y_prob>=0.5).astype(np.int) # bx10
+        y_prob = torch.sigmoid(y_hat*y_mask_que.cuda(GPU)).detach().cpu().numpy() # bx20               
+        y_pred = (y_prob[:,10:]>0.5).astype(np.int) # bx10
         y_numpy = labels[:,10:].numpy() # bx10
         # Acc
-        total_vcorrects += np.sum((y_pred==y_numpy)*y_mask_que.numpy())
+        total_vcorrects += np.sum((y_pred==y_numpy)*y_mask_que[:,10:].numpy())
         total_vquery += np.sum(num_query)
         
         # Eval, Submission
@@ -192,13 +201,13 @@ def validate(mval_loader, SM, eval_mode, GPU):
             sample_sup = labels[0,(10-num_support[0]):10].long().numpy().flatten() 
             sample_que = y_numpy[0,:num_query[0]].astype(int)
             sample_pred = y_pred[0,:num_query[0]]
-            sample_prob = y_prob[0,:num_query[0]]
+            sample_prob = y_prob[0,10:10+num_query[0]]
             tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                        "Q:" + np.array2string(sample_que) + '\n' +
                        "P:" + np.array2string(sample_pred) + '\n' +
                        "prob:" + np.array2string(sample_prob))
             tqdm.write("val_session:{0:}  vloss:{1:.6f}  vacc:{2:.4f}".format(val_session,loss.item(), total_vcorrects/total_vquery))
-        del loss, y_hat_que, x # Restore GPU memory
+        del loss, y_hat, x # Restore GPU memory
         
     # Avg.Acc
     if eval_mode==1:
@@ -259,24 +268,30 @@ def main():
             # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
             num_support = num_items[:,0].detach().numpy().flatten() # If num_items was odd number, query has one more item. 
             num_query   = num_items[:,1].detach().numpy().flatten()
-            #batch_sz    = num_items.shape[0]
+            batch_sz    = num_items.shape[0]
             
             # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
             x = x.permute(0,2,1) # bx70*20
             x_sup = Variable(torch.cat((x[:,:,:10], labels[:,:10].unsqueeze(1)), 1)).cuda(GPU) # bx71(41+29+1)*10 
-            x_que = Variable(x[:,41:,10:].clone()).cuda(GPU) # bx29*10
-
+            x_que = torch.zeros(batch_sz, 72, 20)
+            x_que[:,:41,:10] = x[:,:41,:10].clone() # fill with x_sup_log
+            x_que[:,41:70,:] = x[:,41:,:].clone()   # fill with x_sup_feat and x_que_feat
+            x_que[:, 70,:10] = 1                    # support marking
+            x_que[:, 71,:10] = labels[:,:10] # labels marking
+            x_que = Variable(x_que).cuda(GPU) # bx29*10
+    
             # y 
-            y_que = labels[:,10:].clone() # bx10
+            y = labels.clone() # bx20
             
             # y_mask
-            y_mask_que = y_mask[:,10:].clone()
-
+            y_mask_que = y_mask.clone()
+            y_mask_que[:,:10] = 0
+            
             # Forward & update
-            y_hat_que, att = SM(x_sup, x_que) # y_hat_que: b*10, att: bx10*10
+            y_hat, att = SM(x_sup, x_que) # y_hat: b*20, att: bx10*20
             
             # Calcultate BCE loss
-            loss = F.binary_cross_entropy_with_logits(input=y_hat_que*y_mask_que.cuda(GPU), target=y_que.cuda(GPU)*y_mask_que.cuda(GPU))
+            loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask_que.cuda(GPU), target=y.cuda(GPU)*y_mask_que.cuda(GPU))
             total_trloss += loss.item()
             SM.zero_grad()
             loss.backward()
@@ -285,24 +300,27 @@ def main():
             SM_optim.step()
             
             # Decision
-            y_prob = torch.sigmoid(y_hat_que*y_mask_que.cuda(GPU)).detach().cpu().numpy() # bx20               
-            y_pred = (y_prob>=0.5).astype(np.int) # bx10
+            y_prob = torch.sigmoid(y_hat*y_mask_que.cuda(GPU)).detach().cpu().numpy() # bx20               
+            y_pred = (y_prob[:,10:]>0.5).astype(np.int) # bx10
             y_numpy = labels[:,10:].numpy() # bx10
             # Acc
-            total_corrects += np.sum((y_pred==y_numpy)*y_mask_que.numpy())
+            total_corrects += np.sum((y_pred==y_numpy)*y_mask_que[:,10:].numpy())
             total_query += np.sum(num_query)
+            
             # Restore GPU memory
-            del loss, y_hat_que 
+            del loss, y_hat 
     
             if (session+1)%500 == 0:
                 hist_trloss.append(total_trloss/900)
                 hist_tracc.append(total_corrects/total_query)
                 # Prepare display
-                sample_att = att[0,(10-num_support[0]):10,:num_query[0]].detach().cpu().numpy()
+                sample_att = att[0,(10-num_support[0]):10, (10-num_support[0]):(10+num_query[0])].detach().cpu().numpy()
+                
                 sample_sup = labels[0,(10-num_support[0]):10].long().numpy().flatten() 
                 sample_que = y_numpy[0,:num_query[0]].astype(int)
                 sample_pred = y_pred[0,:num_query[0]]
-                sample_prob = y_prob[0,:num_query[0]]
+                sample_prob = y_prob[0,10:10+num_query[0]]
+
                 tqdm.write(np.array2string(sample_att, formatter={'float_kind':lambda sample_att: "%.2f" % sample_att}))
                 tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                            "Q:" + np.array2string(sample_que) + '\n' +
