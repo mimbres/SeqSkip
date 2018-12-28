@@ -3,7 +3,7 @@
 """
 Created on Tue Dec 11 00:45:08 2018
 
-seq2eH_in20: seqeunce learning model with separate encoder for support and query, 1stack each 
+seq2H_in20: seqeunce learning model with separate encoder for support and query, 1stack each 
 - non-autoregressive (not feeding predicted labels)
 - instance Norm.
 - G: GLU version
@@ -11,7 +11,7 @@ seq2eH_in20: seqeunce learning model with separate encoder for support and query
 - applied more efficient dilated conv over seq1
 - non-causal for sup
 - using sup+query as input (20)
--
+- not using normalization
 
 @author: mimbres
 """
@@ -123,7 +123,7 @@ class SeqModel(nn.Module):
         
         # Attention: K,V from x_sup, Q from x_que
         x_sup = torch.split(x_sup, self.e_ch, dim=1) # K: x_sup[0], V: x_sup[1]
-        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2), x_que)/16, dim=1) # K'*Q: bx10*20
+        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2), x_que), dim=1) # K'*Q: bx10*20
         x = torch.cat((torch.matmul(x_sup[1], att), x_que), 1) # {V*att, Q}: bx(128+128)*10     
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
         return x, att # bx20, bx10x20
