@@ -79,7 +79,7 @@ class SeqEncoder(nn.Module):
     def __init__(self, input_ch, e_ch,
                  h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,5,1,1],
                  h_dils=[1,2,4,8,1,1],
-                 causality=True
+                 causality=True,
                  use_glu=False):
         super(SeqEncoder, self).__init__()
         h_io_chs = [e_ch]*len(h_k_szs)
