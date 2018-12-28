@@ -102,13 +102,13 @@ class SeqModel(nn.Module):
         self.e_ch = e_ch
         self.d_ch = d_ch
         self.sup_enc = SeqEncoder(input_ch=input_dim_s, e_ch=d_ch, 
-                                  h_k_szs=[3,3,3],
-                                  h_dils=[1,3,9],
+                                  h_k_szs=[3,3,3,1,1],
+                                  h_dils=[1,3,9,1,1],
                                   causality=False,
                                   use_glu=use_glu) # bx256*10 
         self.que_enc = SeqEncoder(input_ch=input_dim_q, e_ch=e_ch,
-                                  h_k_szs=[2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
-                                  h_dils=[1,2,4,1,1], #h_dils=[1,2,4,8,1,1],
+                                  h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
+                                  h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
                                   use_glu=use_glu) # bx128*10
         self.classifier = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
                                         nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
