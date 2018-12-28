@@ -323,7 +323,8 @@ def main():
                 sample_pred = y_pred[0,:num_query[0]]
                 sample_prob = y_prob[0,10:10+num_query[0]]
 
-                tqdm.write(np.array2string(sample_att, formatter={'float_kind':lambda sample_att: "%.2f" % sample_att}))
+                tqdm.write(np.array2string(sample_att,
+                                           formatter={'float_kind':lambda sample_att: "%.2f" % sample_att}).replace('\n ','').replace('][',']\n[').replace('[[','['))
                 tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                            "Q:" + np.array2string(sample_que) + '\n' +
                            "P:" + np.array2string(sample_pred) + '\n' +
