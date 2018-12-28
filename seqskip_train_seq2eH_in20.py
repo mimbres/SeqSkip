@@ -152,7 +152,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
         x_que[:,:41,:10] = x[:,:41,:10].clone() # fill with x_sup_log
         x_que[:,41:70,:] = x[:,41:,:].clone()   # fill with x_sup_feat and x_que_feat
         x_que[:, 70,:10] = 1                    # support marking
-        x_que[:, 71,:10] = labels[:,:10].unsqueeze(1) # labels marking
+        x_que[:, 71,:10] = labels[:,:10] # labels marking
         x_que = Variable(x_que).cuda(GPU) # bx29*10
 
         # y 
