@@ -121,7 +121,7 @@ class SeqModel(nn.Module):
         
         # Attention: K,V from x_sup, Q from x_que
         x_sup = torch.split(x_sup, self.e_ch, dim=1) # K: x_sup[0], V: x_sup[1]
-        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2), x_que), dim=2) # K'*Q: bx10*20
+        att = F.softmax(torch.matmul(x_sup[0].transpose(1,2), x_que), dim=1) # K'*Q: bx10*20
         x = torch.cat((torch.matmul(x_sup[1], att), x_que), 1) # {V*att, Q}: bx(128+128)*10     
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
         return x, att # bx20, bx10x20
