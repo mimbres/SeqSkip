@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Dec 11 00:45:08 2018
+Created on Sat Dec 29 13:44:03 2018
+Teacher Net
+T_seq1eH
 
-seq2eH_in20: seqeunce learning model with separate encoder for support and query, 1stack each 
 - non-autoregressive (not feeding predicted labels)
 - instance Norm.
 - G: GLU version
 - H: Highway-net version
-- applied more efficient dilated conv over seq1
-- non-causal for sup
-- using sup+query as input (20)
--
 
 @author: mimbres
 """
@@ -29,7 +26,7 @@ from tqdm import trange, tqdm
 from spotify_data_loader import SpotifyDataloader
 from utils.eval import evaluate
 from blocks.highway_glu_dil_conv_v2 import HighwayDCBlock
-from blocks.multihead_attention import MultiHeadAttention
+#from blocks.multihead_attention import MultiHeadAttention
 cudnn.benchmark = True
 
 
@@ -38,8 +35,6 @@ parser.add_argument("-c","--config",type=str, default="./config_init_dataset.jso
 parser.add_argument("-s","--save_path",type=str, default="./save/exp_seq2eH_in20/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-spl","--use_suplog_as_feat", type=bool, default=True)
-parser.add_argument("-qf","--use_quelog_as_feat", type=bool, default=True)
-parser.add_argument("-pl","--use_predicted_label", type=bool, default=False)
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
 parser.add_argument("-e","--epochs",type=int, default= 10)
@@ -55,8 +50,7 @@ USE_SUPLOG = args.use_suplog_as_feat
 USE_QUELOG = args.use_quelog_as_feat
 USE_PRED_LABEL = args.use_predicted_label
 USE_GLU    = args.use_glu
-INPUT_DIM_S = 71 if USE_SUPLOG else 30 # default: 72
-INPUT_DIM_Q = 72 if USE_QUELOG else 29 # default: 31
+INPUT_DIM = 72 
 
 CLASS_NUM = args.class_num
 EPOCHS = args.epochs
@@ -98,35 +92,24 @@ class SeqEncoder(nn.Module):
         
 
 class SeqModel(nn.Module):
-    def __init__(self, input_dim_s=INPUT_DIM_S, input_dim_q=INPUT_DIM_Q, e_ch=256, d_ch=256, use_glu=USE_GLU):
+    def __init__(self, input_dim=INPUT_DIM, e_ch=128, d_ch=128, use_glu=USE_GLU):
         super(SeqModel, self).__init__()
         self.e_ch = e_ch
         self.d_ch = d_ch
-        self.sup_enc = SeqEncoder(input_ch=input_dim_s, e_ch=e_ch, 
-                                  h_k_szs=[3,3,3,1,1],
-                                  h_dils=[1,3,9,1,1],
-                                  causality=False,
-                                  use_glu=use_glu) # bx256*10 
-        self.que_enc = SeqEncoder(input_ch=input_dim_q, e_ch=e_ch,
+        self.enc = SeqEncoder(input_ch=input_dim, e_ch=e_ch,
                                   h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
                                   h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
                                   use_glu=use_glu) # bx128*10
-        
-        self.mh = MultiHeadAttention(query_dim=e_ch ,key_dim=e_ch, num_units=e_ch, dropout_p=0.5, h=4)
         
         self.classifier = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
                                         nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
                                         nn.Conv1d(d_ch,1,1))
         
         
-    def forward(self, x_sup, x_que):
-        x_sup = self.sup_enc(x_sup) # bx128*10 
-        x_que = self.que_enc(x_que) # bx128*10  
-        
-        # Multi(4)-head Attention: K,V from x_sup, Q from x_que
-        x, att = self.mh(query=x_que.permute(0,2,1), keys=x_sup.permute(0,2,1))
-        x = self.classifier(x.permute(0,2,1)).squeeze(1) # bx256*10 --> b*10
-        return x, att # bx20, bx10x20
+    def forward(self, x):
+        x = self.enc(x) # bx128*10 
+        x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
+        return x# bx20
 
 #%%
 
@@ -150,24 +133,21 @@ def validate(mval_loader, SM, eval_mode, GPU):
         
         # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
         x = x.permute(0,2,1) # bx70*20
-        x_sup = Variable(torch.cat((x[:,:,:10], labels[:,:10].unsqueeze(1)), 1)).cuda(GPU) # bx71(41+29+1)*10 
+        x_feat = torch.zeros(batch_sz, 72, 20)
+        x_feat[:,:70,:] = x.clone()
+        x_feat[:, 70,:10] = 1  
+        x_feat[:, 71,:10] = labels[:,:10].clone()
+        x_feat = Variable(x_feat, requires_grad=False).cuda(GPU)
         
-        x_que = torch.zeros(batch_sz, 72, 20)
-        x_que[:,:41,:10] = x[:,:41,:10].clone() # fill with x_sup_log
-        x_que[:,41:70,:] = x[:,41:,:].clone()   # fill with x_sup_feat and x_que_feat
-        x_que[:, 70,:10] = 1                    # support marking
-        x_que[:, 71,:10] = labels[:,:10] # labels marking
-        x_que = Variable(x_que).cuda(GPU) # bx29*10
-
-        # y 
-        y = labels.clone() # bx20
+        # y
+        y = labels.clone()
         
         # y_mask
         y_mask_que = y_mask.clone()
         y_mask_que[:,:10] = 0
         
         # Forward & update
-        y_hat, att = SM(x_sup, x_que) # y_hat: b*20, att: bx10*20
+        y_hat = SM(x_feat) # y_hat: b*20
 
 #        if USE_PRED_LABEL is True:
 #            # Predict
@@ -276,23 +256,21 @@ def main():
             
             # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
             x = x.permute(0,2,1) # bx70*20
-            x_sup = Variable(torch.cat((x[:,:,:10], labels[:,:10].unsqueeze(1)), 1)).cuda(GPU) # bx71(41+29+1)*10 
-            x_que = torch.zeros(batch_sz, 72, 20)
-            x_que[:,:41,:10] = x[:,:41,:10].clone() # fill with x_sup_log
-            x_que[:,41:70,:] = x[:,41:,:].clone()   # fill with x_sup_feat and x_que_feat
-            x_que[:, 70,:10] = 1                    # support marking
-            x_que[:, 71,:10] = labels[:,:10] # labels marking
-            x_que = Variable(x_que).cuda(GPU) # bx29*10
-    
-            # y 
-            y = labels.clone() # bx20
+            
+            x_feat = torch.zeros(batch_sz, 72, 20)
+            x_feat[:,:70,:] = x.clone()
+            x_feat[:, 70,:10] = 1  
+            x_feat[:, 71,:10] = labels[:,:10].clone()
+            x_feat = Variable(x_feat).cuda(GPU)
+            # y
+            y = labels.clone()
             
             # y_mask
             y_mask_que = y_mask.clone()
             y_mask_que[:,:10] = 0
             
             # Forward & update
-            y_hat, att = SM(x_sup, x_que) # y_hat: b*20, att: bx10*20
+            y_hat = SM(x_feat) # y_hat: b*20
             
             # Calcultate BCE loss
             loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask_que.cuda(GPU), target=y.cuda(GPU)*y_mask_que.cuda(GPU))
@@ -318,15 +296,11 @@ def main():
                 hist_trloss.append(total_trloss/900)
                 hist_tracc.append(total_corrects/total_query)
                 # Prepare display
-                sample_att = att[0,(10-num_support[0]):10, (10-num_support[0]):(10+num_query[0])].detach().cpu().numpy()
-                
                 sample_sup = labels[0,(10-num_support[0]):10].long().numpy().flatten() 
                 sample_que = y_numpy[0,:num_query[0]].astype(int)
                 sample_pred = y_pred[0,:num_query[0]]
                 sample_prob = y_prob[0,10:10+num_query[0]]
 
-                tqdm.write(np.array2string(sample_att,
-                                           formatter={'float_kind':lambda sample_att: "%.2f" % sample_att}).replace('\n ','').replace('][',']\n[').replace('[[','['))
                 tqdm.write("S:" + np.array2string(sample_sup) +'\n'+
                            "Q:" + np.array2string(sample_que) + '\n' +
                            "P:" + np.array2string(sample_pred) + '\n' +
