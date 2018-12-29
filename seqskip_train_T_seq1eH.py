@@ -97,13 +97,13 @@ class SeqModel(nn.Module):
                                   h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
                                   use_glu=use_glu) # bx128*10
         
-        self.classifier = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
-                                        nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
-                                        nn.Conv1d(d_ch,1,1))
-        
+        self.feature = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
+                                        nn.Conv1d(d_ch,d_ch,1), nn.ReLU())
+        self.classifier = nn.Conv1d(d_ch,1,1)
         
     def forward(self, x):
         x = self.enc(x) # bx128*10 
+        x = self.feature(x)
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
         return x# bx20
 
