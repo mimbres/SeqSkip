@@ -246,18 +246,19 @@ def main():
     tqdm.write("Loading saved teacher model from '{0:}'... loss: {1:.6f}".format(FPATH_T_NET_CHECKPOINT,checkpoint['loss']))
     SMT.load_state_dict(checkpoint['SM_state'])
     
-    SMT_Enc  = nn.Sequential(*list(SMT.children())[:1])
+    SMT_Enc  = nn.Sequential(*list(SMT.children())[:1]).cuda(GPU)
     #SMT_EncFeat = nn.Sequential(*list(SMT.children())[:2])
     
     
     # Init Student net --> copy classifier from the Teacher net
     SM = SeqModel_Student().cuda(GPU)
-    SM.feature = deepcopy(SMT.feature.cuda(GPU))
+    SM.feature = deepcopy(SMT.feature)
     for p in list(SM.feature.parameters()):
         p.requires_grad = False
     SM.classifier = deepcopy(SMT.classifier)
     SM.classifier.weight.requires_grad = False
     SM.classifier.bias.requires_grad = False
+    SM = SM.cuda(GPU)
     
     SM_optim = torch.optim.Adam(filter(lambda p: p.requires_grad, SM.parameters()), lr=LEARNING_RATE)
     SM_scheduler = StepLR(SM_optim, step_size=1, gamma=0.9)  
