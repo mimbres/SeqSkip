@@ -252,7 +252,7 @@ def main():
     
     # Init Student net --> copy classifier from the Teacher net
     SM = SeqModel_Student().cuda(GPU)
-    SM.feature = deepcopy(SMT.feature)
+    SM.feature = deepcopy(SMT.feature.cuda(GPU))
     for p in list(SM.feature.parameters()):
         p.requires_grad = False
     SM.classifier = deepcopy(SMT.classifier)
