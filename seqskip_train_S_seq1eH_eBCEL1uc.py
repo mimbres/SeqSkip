@@ -330,7 +330,7 @@ def main():
             
             # Calcultate Distillation loss
             loss1 = F.binary_cross_entropy_with_logits(input=y_hat_enc, target=torch.sigmoid(enc_target.cuda(GPU)))
-            loss2 = F.l1_loss(input=torch.sigmoid(y_hat_enc), target=torch.sigmoid(enc_target.cuda(GPU)))
+            loss2 = F.l1_loss(input=y_hat_enc, target=enc_target.cuda(GPU))
             loss = loss1+loss2
             total_trloss += loss.item()
             SM.zero_grad()
