@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Dec 29 13:44:03 2018
-Teacher Net
-T_seq1eH
+Student Net
+S_seq1eH_e
 
 - non-autoregressive (not feeding predicted labels)
 - instance Norm.
@@ -26,14 +26,16 @@ from tqdm import trange, tqdm
 from spotify_data_loader import SpotifyDataloader
 from utils.eval import evaluate
 from blocks.highway_glu_dil_conv_v2 import HighwayDCBlock
+from copy import deepcopy
 #from blocks.multihead_attention import MultiHeadAttention
 cudnn.benchmark = True
 
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_T_seq1eH/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_S_seq1eH_e/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
+parser.add_argument("-t","--load_teacher_net_fpath",type=str, default="./save/exp_T_seq1eH/check_8_48811.pth")
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
 parser.add_argument("-e","--epochs",type=int, default= 10)
@@ -45,6 +47,7 @@ args = parser.parse_args()
 
 
 # Hyper Parameters
+FPATH_T_NET_CHECKPOINT = args.load_teacher_net_fpath
 USE_GLU    = args.use_glu
 INPUT_DIM = 72 
 
@@ -106,6 +109,26 @@ class SeqModel(nn.Module):
         x = self.feature(x)
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
         return x# bx20
+    
+class SeqModel_Student(nn.Module):
+    def __init__(self, input_dim=INPUT_DIM, e_ch=128, d_ch=128, use_glu=USE_GLU):
+        super(SeqModel_Student, self).__init__()
+        self.e_ch = e_ch
+        self.d_ch = d_ch
+        self.enc = SeqEncoder(input_ch=input_dim, e_ch=e_ch,
+                                  h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
+                                  h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
+                                  use_glu=use_glu) # bx128*10
+        
+        self.feature = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
+                                        nn.Conv1d(d_ch,d_ch,1), nn.ReLU())
+        self.classifier = nn.Conv1d(d_ch,1,1)
+        
+    def forward(self, x):
+        enc_out = self.enc(x) # bx128*10 
+        x = self.feature(enc_out)
+        x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
+        return enc_out, x# bx20
 
 #%%
 
@@ -217,10 +240,30 @@ def main():
                                       shuffle=False,
                                       seq_mode=True) 
     
-    # Init neural net
-    SM = SeqModel().cuda(GPU)
-    SM_optim = torch.optim.Adam(SM.parameters(), lr=LEARNING_RATE)
-    SM_scheduler = StepLR(SM_optim, step_size=1, gamma=0.8)  
+    # Load Teacher net
+    SMT = SeqModel().cuda(GPU) 
+    checkpoint = torch.load(FPATH_T_NET_CHECKPOINT, map_location='cuda:{}'.format(GPU))
+    tqdm.write("Loading saved teacher model from '{0:}'... loss: {1:.6f}".format(FPATH_T_NET_CHECKPOINT,checkpoint['loss']))
+    SMT.load_state_dict(checkpoint['SM_state'])
+    
+    SMT_Enc  = nn.Sequential(*list(SMT.children())[:1])
+    #SMT_EncFeat = nn.Sequential(*list(SMT.children())[:2])
+    
+    
+    # Init Student net --> copy classifier from the Teacher net
+    SM = SeqModel_Student().cuda(GPU)
+    SM.feature = deepcopy(SMT.feature)
+    for p in list(SM.feature.parameters()):
+        p.requires_grad = False
+    SM.classifier = deepcopy(SMT.classifier)
+    SM.classifier.weight.requires_grad = False
+    SM.classifier.bias.requires_grad = False
+    
+    SM_optim = torch.optim.Adam(filter(lambda p: p.requires_grad, SM.parameters()), lr=LEARNING_RATE)
+    SM_scheduler = StepLR(SM_optim, step_size=1, gamma=0.9)  
+    
+    
+    
     
     # Load checkpoint
     if args.load_continue_latest is None:
@@ -242,7 +285,8 @@ def main():
         total_query    = 0
         total_trloss   = 0
         for session in trange(len(tr_sessions_iter), desc='sessions', position=1, ascii=True):
-            SM.train();
+            SMT.eval(); # Teacher-net
+            SM.train(); # Student-net
             x, labels, y_mask, num_items, index = tr_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS 
             
             # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
@@ -253,23 +297,35 @@ def main():
             # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
             x = x.permute(0,2,1) # bx70*20
             
-            x_feat = torch.zeros(batch_sz, 72, 20)
-            x_feat[:,:70,:] = x.clone()
-            x_feat[:, 70,:10] = 1  
-            x_feat[:, 71,:10] = labels[:,:10].clone()
-            x_feat = Variable(x_feat).cuda(GPU)
-            # y
-            y = labels.clone()
+            # x_feat_T: Teacher-net input, x_feat_S: Student-net input(que-log is excluded)
+            x_feat_T = torch.zeros(batch_sz, 72, 20)
+            x_feat_T[:,:70,:] = x.clone()
+            x_feat_T[:, 70,:10] = 1 # Sup/Que state indicator  
+            x_feat_T[:, 71,:10] = labels[:,:10].clone()
+                        
+            x_feat_S = x_feat_T.clone()
+            x_feat_S[:, :41, 10:] = 0 # remove que-log
+            
+            x_feat_T = x_feat_T.cuda(GPU)
+            x_feat_S = Variable(x_feat_S).cuda(GPU)
+            
+            
+            # Target: Prepare Teacher's intermediate output 
+            enc_target = SMT_Enc(x_feat_T)
+            #target = SMT_EncFeat(x_feat_T)
+        
             
             # y_mask
             y_mask_que = y_mask.clone()
             y_mask_que[:,:10] = 0
             
             # Forward & update
-            y_hat = SM(x_feat) # y_hat: b*20
+            y_hat_enc, y_hat = SM(x_feat_S) # y_hat: b*20
             
-            # Calcultate BCE loss
-            loss = F.binary_cross_entropy_with_logits(input=y_hat*y_mask_que.cuda(GPU), target=y.cuda(GPU)*y_mask_que.cuda(GPU))
+            # Calcultate Distillation loss
+            loss1 = F.binary_cross_entropy_with_logits(input=y_hat_enc, target=torch.sigmoid(enc_target.cuda(GPU)))
+            loss2 = F.l1_loss(input=y_hat_enc, target=enc_target.cuda(GPU))
+            loss = loss1 + loss2
             total_trloss += loss.item()
             SM.zero_grad()
             loss.backward()
@@ -278,6 +334,7 @@ def main():
             SM_optim.step()
             
             # Decision
+            SM.eval();
             y_prob = torch.sigmoid(y_hat*y_mask_que.cuda(GPU)).detach().cpu().numpy() # bx20               
             y_pred = (y_prob[:,10:]>0.5).astype(np.int) # bx10
             y_numpy = labels[:,10:].numpy() # bx10
@@ -286,7 +343,7 @@ def main():
             total_query += np.sum(num_query)
             
             # Restore GPU memory
-            del loss, y_hat 
+            del loss, y_hat, y_hat_enc
     
             if (session+1)%500 == 0:
                 hist_trloss.append(total_trloss/900)
