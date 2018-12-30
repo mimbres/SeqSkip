@@ -39,7 +39,7 @@ parser.add_argument("-t","--load_teacher_net_fpath",type=str, default="./save/ex
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
 parser.add_argument("-e","--epochs",type=int, default= 10)
-parser.add_argument("-lr","--learning_rate", type=float, default = 0.001)
+parser.add_argument("-lr","--learning_rate", type=float, default = 0.002)
 parser.add_argument("-b","--train_batch_size", type=int, default = 2048)
 parser.add_argument("-tsb","--test_batch_size", type=int, default = 1024)
 parser.add_argument("-g","--gpu",type=int, default=0)
@@ -166,7 +166,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
         y_mask_que[:,:10] = 0
         
         # Forward & update
-        y_hat = SM(x_feat) # y_hat: b*20
+        _, y_hat = SM(x_feat) # y_hat: b*20
 
 #        if USE_PRED_LABEL is True:
 #            # Predict
@@ -324,8 +324,9 @@ def main():
             y_hat_enc, y_hat = SM(x_feat_S) # y_hat: b*20
             
             # Calcultate Distillation loss
-            loss = F.binary_cross_entropy_with_logits(input=y_hat_enc, target=torch.sigmoid(enc_target.cuda(GPU)))
-            #loss2 = F.l1_loss(input=y_hat_enc, target=enc_target.cuda(GPU))
+            loss1 = F.binary_cross_entropy_with_logits(input=y_hat_enc, target=torch.sigmoid(enc_target.cuda(GPU)))
+            loss2 = F.l1_loss(input=y_hat_enc, target=enc_target.cuda(GPU))
+            loss = loss1+loss2
             total_trloss += loss.item()
             SM.zero_grad()
             loss.backward()

@@ -166,7 +166,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
         y_mask_que[:,:10] = 0
         
         # Forward & update
-        y_hat = SM(x_feat) # y_hat: b*20
+        _, y_hat = SM(x_feat) # y_hat: b*20
 
 #        if USE_PRED_LABEL is True:
 #            # Predict

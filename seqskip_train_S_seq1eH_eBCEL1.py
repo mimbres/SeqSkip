@@ -33,7 +33,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_S_seq1eH_eBCE/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_S_seq1eH_eBCEL1/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-t","--load_teacher_net_fpath",type=str, default="./save/exp_T_seq1eH/check_8_48811.pth")
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
@@ -324,8 +324,9 @@ def main():
             y_hat_enc, y_hat = SM(x_feat_S) # y_hat: b*20
             
             # Calcultate Distillation loss
-            loss = F.binary_cross_entropy_with_logits(input=y_hat_enc, target=torch.sigmoid(enc_target.cuda(GPU)))
-            #loss2 = F.l1_loss(input=y_hat_enc, target=enc_target.cuda(GPU))
+            loss1 = F.binary_cross_entropy_with_logits(input=y_hat_enc, target=torch.sigmoid(enc_target.cuda(GPU)))
+            loss2 = F.l1_loss(input=y_hat_enc, target=enc_target.cuda(GPU))
+            loss = loss1+loss2
             total_trloss += loss.item()
             SM.zero_grad()
             loss.backward()
