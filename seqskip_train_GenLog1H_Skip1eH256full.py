@@ -35,7 +35,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_GenLog1H_Skip1eH/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_GenLog1H_Skip1eH256full/")
 parser.add_argument("-gf","--load_generator_fpath",type=str, default="./save/exp_seq1H_genlog128/check_14_48811.pth")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-spl","--use_suplog_as_feat", type=bool, default=True)
@@ -168,7 +168,7 @@ class SeqEncoder2(nn.Module):
 
 # Model for predicting skip labels
 class SeqModel2(nn.Module):
-    def __init__(self, input_dim=INPUT_DIM, e_ch=128, d_ch=128, use_glu=USE_GLU):
+    def __init__(self, input_dim=INPUT_DIM, e_ch=256, d_ch=256, use_glu=USE_GLU):
         super(SeqModel2, self).__init__()
         self.e_ch = e_ch
         self.d_ch = d_ch
@@ -296,7 +296,7 @@ def main():
     print('Initializing dataloader...')
     mtrain_loader = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True,
-                                      data_sel=(0, 99965071), # 80% 트레인
+                                      #data_sel=(0, 99965071), # 80% 트레인
                                       batch_size=TR_BATCH_SZ,
                                       shuffle=True,
                                       seq_mode=True) # seq_mode implemented  
@@ -435,7 +435,7 @@ def main():
                 total_trloss   = 0
                 
             
-            if (session+1)%2000 == 0:
+            if (session+1)%25000 == 0:
                  # Validation
                  validate(mval_loader, SM, SMG, eval_mode=True, GPU=GPU)
                  # Save
