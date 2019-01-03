@@ -296,14 +296,14 @@ def main():
     print('Initializing dataloader...')
     mtrain_loader = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True,
-                                      data_sel=(0, 99965071), # 80% 트레인
+                                      data_sel=(0, 124000000), # 80% 트레인
                                       batch_size=TR_BATCH_SZ,
                                       shuffle=True,
                                       seq_mode=True) # seq_mode implemented  
     
     mval_loader  = SpotifyDataloader(config_fpath=args.config,
                                       mtrain_mode=True, # True, because we use part of trainset as testset
-                                      data_sel=(99965071, 101065071),#104965071),#(99965071, 124950714), # 20%를 테스트
+                                      data_sel=(124000000, 124950714),#104965071),#(99965071, 124950714), # 20%를 테스트
                                       batch_size=TS_BATCH_SZ,
                                       shuffle=False,
                                       seq_mode=True) 
