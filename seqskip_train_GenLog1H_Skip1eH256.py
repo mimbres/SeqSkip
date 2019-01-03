@@ -44,8 +44,8 @@ parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
 parser.add_argument("-e","--epochs",type=int, default= 15)
 parser.add_argument("-lr","--learning_rate", type=float, default = 0.001)
-parser.add_argument("-b","--train_batch_size", type=int, default = 2048)
-parser.add_argument("-tsb","--test_batch_size", type=int, default = 1024)
+parser.add_argument("-b","--train_batch_size", type=int, default = 1024)
+parser.add_argument("-tsb","--test_batch_size", type=int, default = 512)
 parser.add_argument("-g","--gpu",type=int, default=0)
 args = parser.parse_args()
 
@@ -236,7 +236,7 @@ def validate(mval_loader, SM, SMG, eval_mode, GPU):
         x_feat_S = x_feat_T.clone()
         x_feat_S[:, :41, 10:] = y_hat_qlog[:,:,10:].clone() # remove que-log
         x_feat_S = Variable(x_feat_S).cuda(GPU)
-        del y_hat_qlog, x_1
+        del y_hat_qlog, x_1, log_shift, labels_shift
         # y 
         y = labels.clone() # bx20
         
@@ -260,7 +260,7 @@ def validate(mval_loader, SM, SMG, eval_mode, GPU):
         
         
         # Restore GPU memory
-        del loss, y_hat
+        del loss, y_hat, x_feat_S
             
         # Eval, Submission
         if eval_mode is not 0:
