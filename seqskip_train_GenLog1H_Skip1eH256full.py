@@ -199,7 +199,7 @@ def validate(mval_loader, SM, SMG, eval_mode, GPU):
     total_vquery    = 0
     val_sessions_iter = iter(mval_loader)
     for val_session in trange(len(val_sessions_iter), desc='val-sessions', position=2, ascii=True):
-        SM.eval()        
+        SM.eval();        
         x, labels, y_mask, num_items, index = val_sessions_iter.next() # FIXED 13.Dec. SEPARATE LOGS. QUERY SHOULT NOT INCLUDE LOGS
         
         # Sample data for 'support' and 'query': ex) 15 items = 7 sup, 8 queries...        
@@ -277,7 +277,7 @@ def validate(mval_loader, SM, SMG, eval_mode, GPU):
                        "Q:" + np.array2string(sample_que) + '\n' +
                        "P:" + np.array2string(sample_pred) + '\n' +
                        "prob:" + np.array2string(sample_prob))
-            tqdm.write("val_session:{0:}  vloss:{1:.6f}   vacc:{4:.4f}".format(val_session,
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}   vacc:{2:.4f}".format(val_session,
                        total_vloss/total_vquery, total_vcorrects/total_vquery))
         
     # Avg.Acc (skip labels only, log-generation acc is not implemented yet!)
@@ -435,19 +435,19 @@ def main():
                 total_trloss   = 0
                 
             
-            if (session+1)%25000 == 0:
-                 # Validation
-                 validate(mval_loader, SM, SMG, eval_mode=True, GPU=GPU)
-                 # Save
-                 torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
-                             'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
-                             'SM_sch_state': SM_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
-        # Validation
-        validate(mval_loader, SM, SMG, eval_mode=True, GPU=GPU)
-        # Save
-        torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
-                    'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
-                    'SM_sch_state': SM_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
+#            if (session+1)%25000 == 0:
+#                 # Validation
+#                 validate(mval_loader, SM, SMG, eval_mode=True, GPU=GPU)
+#                 # Save
+#                 torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
+#                             'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
+#                             'SM_sch_state': SM_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
+#        # Validation
+#        validate(mval_loader, SM, SMG, eval_mode=True, GPU=GPU)
+#        # Save
+#        torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
+#                    'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
+#                    'SM_sch_state': SM_scheduler.state_dict()}, MODEL_SAVE_PATH + "check_{0:}_{1:}.pth".format(epoch, session))
         SM_scheduler.step()
     
 if __name__ == '__main__':

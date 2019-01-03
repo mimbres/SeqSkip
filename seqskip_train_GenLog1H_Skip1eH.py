@@ -277,7 +277,7 @@ def validate(mval_loader, SM, SMG, eval_mode, GPU):
                        "Q:" + np.array2string(sample_que) + '\n' +
                        "P:" + np.array2string(sample_pred) + '\n' +
                        "prob:" + np.array2string(sample_prob))
-            tqdm.write("val_session:{0:}  vloss:{1:.6f}   vacc:{4:.4f}".format(val_session,
+            tqdm.write("val_session:{0:}  vloss:{1:.6f}   vacc:{2:.4f}".format(val_session,
                        total_vloss/total_vquery, total_vcorrects/total_vquery))
         
     # Avg.Acc (skip labels only, log-generation acc is not implemented yet!)
@@ -435,7 +435,7 @@ def main():
                 total_trloss   = 0
                 
             
-            if (session+1)%2000 == 0:
+            if (session+1)%25000 == 0:
                  # Validation
                  validate(mval_loader, SM, SMG, eval_mode=True, GPU=GPU)
                  # Save
