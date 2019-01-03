@@ -32,7 +32,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_MH_seq1eH_v2/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_MH_seq1H_v3/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
@@ -110,6 +110,15 @@ class SeqModel(nn.Module):
                                   h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
                                   use_glu=use_glu) # bx128*10
         
+        
+        self.mh_tot2 = MultiHeadAttention(query_dim=e_ch ,key_dim=e_ch, num_units=e_ch, dropout_p=0.95, h=8)
+        
+        self.enc2 = SeqEncoder(input_ch=128, e_ch=64,
+                          h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
+                          h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
+                          use_glu=use_glu) # bx128*10
+        
+        
         self.feature = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
                                         nn.Conv1d(d_ch,d_ch,1), nn.ReLU())
         self.classifier = nn.Conv1d(d_ch,1,1)
@@ -128,6 +137,8 @@ class SeqModel(nn.Module):
         x = torch.cat((x, x_rel), 1)
         x, _ = self.mh_tot(query=x.permute(0,2,1), keys=x.permute(0,2,1))
         x = self.enc(x.permute(0,2,1)) # bx128*10 
+        x, _ = self.mh_tot2(query=x.permute(0,2,1), keys=x.permute(0,2,1))
+        x = self.enc2(x.permute(0,2,1))
         x = self.feature(x)
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
         return x# bx20

@@ -23,7 +23,7 @@ import numpy as np
 import glob, os
 import argparse
 from tqdm import trange, tqdm 
-from spotify_data_loader import SpotifyDataloader
+from spotify_data_loader_v2 import SpotifyDataloader
 from utils.eval import evaluate
 from blocks.highway_glu_dil_conv_v2 import HighwayDCBlock
 from blocks.multihead_attention import MultiHeadAttention
@@ -32,7 +32,7 @@ cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description="Sequence Skip Prediction")
 parser.add_argument("-c","--config",type=str, default="./config_init_dataset.json")
-parser.add_argument("-s","--save_path",type=str, default="./save/exp_MH_seq1eH_v2/")
+parser.add_argument("-s","--save_path",type=str, default="./save/exp_MH_seq1H_v3_dt2/")
 parser.add_argument("-l","--load_continue_latest",type=str, default=None)
 parser.add_argument("-glu","--use_glu", type=bool, default=False)
 parser.add_argument("-w","--class_num",type=int, default = 2)
@@ -46,7 +46,7 @@ args = parser.parse_args()
 
 # Hyper Parameters
 USE_GLU    = args.use_glu
-INPUT_DIM = 72 
+INPUT_DIM = 80 
 
 CLASS_NUM = args.class_num
 EPOCHS = args.epochs
@@ -110,9 +110,18 @@ class SeqModel(nn.Module):
                                   h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
                                   use_glu=use_glu) # bx128*10
         
-        self.feature = nn.Sequential(nn.Conv1d(d_ch,d_ch,1), nn.ReLU(),
-                                        nn.Conv1d(d_ch,d_ch,1), nn.ReLU())
-        self.classifier = nn.Conv1d(d_ch,1,1)
+        
+        self.mh_tot2 = MultiHeadAttention(query_dim=e_ch ,key_dim=e_ch, num_units=e_ch, dropout_p=0.95, h=8)
+        
+        self.enc2 = SeqEncoder(input_ch=128, e_ch=64,
+                          h_k_szs=[2,2,2,3,1,1], #h_k_szs=[2,2,2,3,1,1],
+                          h_dils=[1,2,4,8,1,1], #h_dils=[1,2,4,8,1,1],
+                          use_glu=use_glu) # bx128*10
+        
+        
+        self.feature = nn.Sequential(nn.Conv1d(64,64,1), nn.ReLU(),
+                                        nn.Conv1d(64,64,1), nn.ReLU())
+        self.classifier = nn.Conv1d(64,1,1)
         
     def forward(self, x_sup, x_que):
         feat_sup = self.feature_sup(x_sup)
@@ -128,6 +137,8 @@ class SeqModel(nn.Module):
         x = torch.cat((x, x_rel), 1)
         x, _ = self.mh_tot(query=x.permute(0,2,1), keys=x.permute(0,2,1))
         x = self.enc(x.permute(0,2,1)) # bx128*10 
+        x, _ = self.mh_tot2(query=x.permute(0,2,1), keys=x.permute(0,2,1))
+        x = self.enc2(x.permute(0,2,1))
         x = self.feature(x)
         x = self.classifier(x).squeeze(1) # bx256*10 --> b*10
         return x# bx20
@@ -154,17 +165,17 @@ def validate(mval_loader, SM, eval_mode, GPU):
         
         # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
         x = x.permute(0,2,1) # bx70*20
-        x_feat = torch.zeros(batch_sz, 72, 20)
+            
+        x_feat = torch.zeros(batch_sz, 80, 20)
         x_feat[:,:70,:] = x.clone()
         x_feat[:,:41,10:] = 0
         x_feat[:, 70,:10] = 1  
-        x_feat[:, 71,:10] = labels[:,:10].clone()
-        x_feat_sup = Variable(x_feat[:,:,:10], requires_grad = False).cuda(GPU)
-        x_feat_que = Variable(x_feat[:,:,10:], requires_grad = False).cuda(GPU)
+        x_feat[:, 71:74,:10] = labels[:,:10,:].permute(0,2,1).clone()
+        x_feat_sup = Variable(x_feat[:,:,:10]).cuda(GPU)
+        x_feat_que = Variable(x_feat[:,:,10:]).cuda(GPU)
         del x_feat
-        
         # y
-        y = labels.clone()
+        y = labels[:,:,1].clone()
         
         # y_mask
         y_mask_que = y_mask.clone()
@@ -194,7 +205,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
         # Decision
         y_prob = torch.sigmoid(y_hat*y_mask_que.cuda(GPU)).detach().cpu().numpy() # bx20               
         y_pred = (y_prob[:,10:]>0.5).astype(np.int) # bx10
-        y_numpy = labels[:,10:].numpy() # bx10
+        y_numpy = labels[:,10:,1].numpy() # bx10
         # Acc
         total_vcorrects += np.sum((y_pred==y_numpy)*y_mask_que[:,10:].numpy())
         total_vquery += np.sum(num_query)
@@ -206,7 +217,7 @@ def validate(mval_loader, SM, eval_mode, GPU):
                 gt.append(y_numpy[b,:num_query[b]].flatten())
                 
         if (val_session+1)%400 == 0:
-            sample_sup = labels[0,(10-num_support[0]):10].long().numpy().flatten() 
+            sample_sup = labels[0,(10-num_support[0]):10,1].long().numpy().flatten() 
             sample_que = y_numpy[0,:num_query[0]].astype(int)
             sample_pred = y_pred[0,:num_query[0]]
             sample_prob = y_prob[0,10:10+num_query[0]]
@@ -281,16 +292,16 @@ def main():
             # x: the first 10 items out of 20 are support items left-padded with zeros. The last 10 are queries right-padded.
             x = x.permute(0,2,1) # bx70*20
             
-            x_feat = torch.zeros(batch_sz, 72, 20)
+            x_feat = torch.zeros(batch_sz, 80, 20)
             x_feat[:,:70,:] = x.clone()
             x_feat[:,:41,10:] = 0
             x_feat[:, 70,:10] = 1  
-            x_feat[:, 71,:10] = labels[:,:10].clone()
+            x_feat[:, 71:74,:10] = labels[:,:10,:].permute(0,2,1).clone()
             x_feat_sup = Variable(x_feat[:,:,:10]).cuda(GPU)
             x_feat_que = Variable(x_feat[:,:,10:]).cuda(GPU)
             del x_feat
             # y
-            y = labels.clone()
+            y = labels[:,:,1].clone()
             
             # y_mask
             y_mask_que = y_mask.clone()
@@ -311,7 +322,7 @@ def main():
             # Decision
             y_prob = torch.sigmoid(y_hat*y_mask_que.cuda(GPU)).detach().cpu().numpy() # bx20               
             y_pred = (y_prob[:,10:]>0.5).astype(np.int) # bx10
-            y_numpy = labels[:,10:].numpy() # bx10
+            y_numpy = labels[:,10:,1].numpy() # bx10
             # Acc
             total_corrects += np.sum((y_pred==y_numpy)*y_mask_que[:,10:].numpy())
             total_query += np.sum(num_query)
@@ -323,7 +334,7 @@ def main():
                 hist_trloss.append(total_trloss/900)
                 hist_tracc.append(total_corrects/total_query)
                 # Prepare display
-                sample_sup = labels[0,(10-num_support[0]):10].long().numpy().flatten() 
+                sample_sup = labels[0,(10-num_support[0]):10,1].long().numpy().flatten() 
                 sample_que = y_numpy[0,:num_query[0]].astype(int)
                 sample_pred = y_pred[0,:num_query[0]]
                 sample_prob = y_prob[0,10:10+num_query[0]]
