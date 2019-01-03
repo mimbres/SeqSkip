@@ -167,3 +167,58 @@ plt.figure(); plt.bar(np.arange(len(cnt)), cnt)
 x_index = np.arange(len(cnt), step=50)
 plt.xticks(x_index, n_seekback.astype(str)[x_index], fontsize=12, rotation=45)
 plt.ylabel('play count'); plt.title("histogram of n_seekback(>5)")
+
+
+#%% Distillation plot
+target = SMT_Enc(x_feat_T)
+target2 = SMT_EncFeat(x_feat_T)
+
+import matplotlib.pyplot as plt
+plt.figure()
+plt.subplot(3,4,1)
+plt.plot(target.detach().cpu().numpy()[1,:,8])
+plt.title('dilated_conv_Encoder output: S8(skip=0)')
+
+plt.subplot(3,4,2)
+plt.plot(target2.detach().cpu().numpy()[1,:,8])
+plt.title('(L-1) layer of classifier output S8(skip=0)')
+
+plt.subplot(3,4,5)
+plt.plot(target.detach().cpu().numpy()[1,:,7])
+plt.title('dilated_conv_Encoder output: S7(skip=0)')
+
+plt.subplot(3,4,6)
+plt.plot(target2.detach().cpu().numpy()[1,:,7])
+plt.title('(L-1) layer of classifier output S7(skip=0)')
+
+plt.subplot(3,4,9)
+plt.plot(target.detach().cpu().numpy()[1,:,9])
+plt.title('dilated_conv_Encoder output: S9(skip=1)')
+
+plt.subplot(3,4,10)
+plt.plot(target2.detach().cpu().numpy()[1,:,9])
+plt.title('(L-1) layer of classifier output S9(skip=1)')
+
+plt.subplot(3,4,3)
+plt.plot(target.detach().cpu().numpy()[1,:,12])
+plt.title('dilated_conv_Encoder output: Q3(skip=0)')
+
+plt.subplot(3,4,4)
+plt.plot(target2.detach().cpu().numpy()[1,:,12])
+plt.title('(L-1) layer of classifier output Q3(skip=0)')
+
+plt.subplot(3,4,7)
+plt.plot(target.detach().cpu().numpy()[1,:,11])
+plt.title('dilated_conv_Encoder output: Q2(skip=1)')
+
+plt.subplot(3,4,8)
+plt.plot(target2.detach().cpu().numpy()[1,:,11])
+plt.title('(L-1) layer of classifier output Q2(skip=1)')
+
+plt.subplot(3,4,11)
+plt.plot(target.detach().cpu().numpy()[1,:,10])
+plt.title('dilated_conv_Encoder output: Q1(skip=1)')
+
+plt.subplot(3,4,12)
+plt.plot(target2.detach().cpu().numpy()[1,:,10])
+plt.title('(L-1) layer of classifier output Q1(skip=1)')
