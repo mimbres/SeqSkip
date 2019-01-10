@@ -8,7 +8,7 @@ Our best submission result (aacc=0.637) with sequence learning was based on seqs
 - Other variants of this model uses various attention modules.
 
 Other approaches (in progress):
-- multi-task learning with 1 stack generative model (aacc=0.635) that generates userlog in advance of skip-prediction is in seqskip_train_GenLog1H_Skip1eH.py
+- Multi-task learning with 1 stack generative model (aacc=0.635) that generates userlog in advance of skip-prediction is in seqskip_train_GenLog1H_Skip1eH.py
 - 2 stack large generative model (not submitted) is very slow, seqskip_train_GenLog1H_Skip1eH256full.py
 - [Learn to compare](https://arxiv.org/abs/1711.06025) (CVPR 2018, F Sung et al.), a relation-net based meta-leraning approach is in seqskip_train_rnbc1*.py
 - [Learn to compare](https://arxiv.org/abs/1711.06025) with Some improvement is in seqskip_train_rnbc2*.py
