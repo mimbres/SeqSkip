@@ -33,7 +33,7 @@ Other approaches (in progress):
 - spotify_data_loader.py or spotify_data_loader_v2.py is the data loader class used for training.
 - Normalization:
   - Many categorical user behavior logs are decoded as one-hot vectors.
-  - Number of click fwd,backwd was minmax normalized after taking logarithm.
+  - Number of click fwd/backwd was minmax normalized after taking logarithm.
   - We didn't make use of dates.
   - Acoustic echonest features were standardized by mean=0 and std=1.
  
