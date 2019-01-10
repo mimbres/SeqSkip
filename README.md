@@ -1,4 +1,4 @@
-# SeqSkip, team name: mimbres
+# SeqSkip: mimbres (team name at crowd.ai)
 
 
 Our best submission result (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
