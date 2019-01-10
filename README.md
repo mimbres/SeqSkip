@@ -1,7 +1,7 @@
 # SeqSkip, team name: mimbres
 
 
-Our latest/best submission (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
+Our best submission result (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
 - For test, seqskip_test_seq1.py
 - This model consists of highway layers(or GLUs) and dilated convolution layers.
 - Other variants of this model uses various attention modules.
