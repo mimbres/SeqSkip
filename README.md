@@ -36,7 +36,7 @@ Other approaches (in progress):
   - Many categorical user behavior logs are decoded into one-hot vectors.
   - Number of click fwd/backwd was minmax normalized after taking logarithm.
   - We didn't make use of dates.
-  - Acoustic echonest features were standardized by mean=0 and std=1.
+  - Acoustic echonest features were standardized to mean=0 and std=1.
  
 # Plots:
 - plot_dataset.py can display some useful stats of Spotify dataset. You can see them in /images folder.
