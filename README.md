@@ -32,8 +32,10 @@ Other approaches (in progress):
 - Acoustic features are loaded into physical memory(11Gb).
 - spotify_data_loader.py or spotify_data_loader_v2.py is the data loader class used for training.
 # Plots:
-- plot_dataset.py can display some stats of dataset
+- plot_dataset.py can display some useful stats of Spotify dataset
 
 # This repository needs clean-up!
 
+
+rayno1@snu.ac.kr
 
