@@ -24,7 +24,7 @@ Other approaches (in progress):
 - 20% for validation
 # System requirements:
 - PyTorch 0.4 or 1.0
-- pandas, numpy
+- pandas, numpy, tqdm, sklearn
 - tested with Titan V or 1080ti GPU
 # Preprocessing:
 - Please modify config_init_dataset.json to set path of original data files. 
