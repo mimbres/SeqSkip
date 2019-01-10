@@ -32,10 +32,10 @@ Other approaches (in progress):
 - Acoustic features are loaded into physical memory (11Gb).
 - spotify_data_loader.py or spotify_data_loader_v2.py is the data loader class used for training.
 - Normalization:
- - Many categorical user behavior logs are decoded as one-hot vectors.
- - Number of click fwd,backwd was minmax normalized after taking logarithm.
- - We didn't make use of dates.
- - Acoustic echonest features were standardized by mean=0 and std=1.
+  - Many categorical user behavior logs are decoded as one-hot vectors.
+  - Number of click fwd,backwd was minmax normalized after taking logarithm.
+  - We didn't make use of dates.
+  - Acoustic echonest features were standardized by mean=0 and std=1.
  
 # Plots:
 - plot_dataset.py can display some useful stats of Spotify dataset. You can see them in /images folder.
