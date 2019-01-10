@@ -3,12 +3,15 @@
 
 Our latest/best submission (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
 - For test, seqskip_test_seq1.py
+- This model consists of highway layers and dilated convolution layers.
+- Other variants of this model uses various attention modules.
 
 Other approaches (in progress):
 - 1 stack generative model (aacc=0.635) is in seqskip_train_GenLog1H_Skip1eH.py
 - 2 stack large generative model (not submitted) is very slow, seqskip_train_GenLog1H_Skip1eH256full.py
 - "Learn to compare", a relation-net based meta-leraning approach is in seqskip_train_rnbc1*.py
 - "Learn to compare" with Some improvement is in seqskip_train_rnbc2*.py
+- Transformer-like multi-head attention model is in seqskip_train_MH*.py
 - Distillation approaches are in seqskip_train_T* and seqskip_train_S* for the teacher and student nets, respectively.
 - etc.
 
