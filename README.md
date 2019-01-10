@@ -1,4 +1,5 @@
-# SeqSkip: mimbres at [Spotify Sequential Skip Prediction Challenge](https://www.crowdai.org/challenges/spotify-sequential-skip-prediction-challenge)
+# mimbres/seqskip:
+- [Spotify Sequential Skip Prediction Challenge](https://www.crowdai.org/challenges/spotify-sequential-skip-prediction-challenge)
 
 
 Our best submission result (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
