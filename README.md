@@ -13,7 +13,7 @@ Other approaches (in progress):
 - "Learn to compare" with Some improvement is in seqskip_train_rnbc2*.py
 - A naive transformer with multi-head attention model is in seqskip_train_MH*.py
 - seqskip_train_MH_seq1H_v3_dt2.py can be thought as a similar approach to "SNAIL" (CVPR 2018, N Mishra et al.). 
-- Distillation approaches are in seqskip_train_T* and seqskip_train_S* for the teacher(Surprisingly, aacc>0.8, by using metadata for queries!!) and student nets, respectively. We beilieve that this approach can be an intersting issue at the workshop!
+- Distillation approaches are in seqskip_train_T* and seqskip_train_S* for the teacher (Surprisingly, aacc>0.8, by using metadata for queries!!) and student nets, respectively. We beilieve that this approach can be an intersting issue at the workshop!
 - etc.
 
 # Note that we did not use any external data nor pre-trained model.
