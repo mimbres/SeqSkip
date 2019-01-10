@@ -18,7 +18,8 @@ Other approaches (in progress):
 - pandas, numpy
 - tested with Titan V or 1080ti GPU
 # Preprocessing:
-- Please run preparing_data.py first(Because the data is huge, we compress it as 8-bit uint formatted np.memmap)
+- Please modify config_init_dataset.json to set path of original data files. 
+- Please run preparing_data.py(Because the data is huge, we compress it as 8-bit uint formatted np.memmap)
 - Thanks to np.memmap, we can have 50Gb+ virtual memory for meta data.
 - Acoustic features are loaded into physical memory(11Gb).
 - spotify_data_loader.py or spotify_data_loader_v2.py is the data loader class used for training.
