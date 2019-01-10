@@ -6,7 +6,7 @@ Our best submission result (aacc=0.637) with sequence learning was based on seqs
 - For test, seqskip_test_seq1.py
 - This model consists of highway layers(or GLUs) and dilated convolution layers.
 - Very similar model can be found in [DCTTS](https://arxiv.org/abs/1710.08969) (ICASSP 2018, H Tachibana et al.).
-- Other variants of this model uses various attention modules.
+- Other variants of this model use various attention modules.
 
 Other approaches (in progress):
 - [Multi-task learning](https://arxiv.org/pdf/1707.08114.pdf) with 1 stack generative model (aacc=0.635) that generates userlog in advance of skip-prediction is in seqskip_train_GenLog1H_Skip1eH.py
