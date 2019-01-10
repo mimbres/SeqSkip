@@ -14,7 +14,7 @@ Other approaches (in progress):
 - [Learn to compare](https://arxiv.org/abs/1711.06025) (CVPR 2018, F Sung et al.), a relation-net based meta-leraning approach is in seqskip_train_rnbc1*.py
 - [Learn to compare](https://arxiv.org/abs/1711.06025) with Some improvement is in seqskip_train_rnbc2*.py
 - A naive [Transformer](https://arxiv.org/abs/1706.03762) with multi-head attention model is in seqskip_train_MH*.py
-- seqskip_train_MH_seq1H_v3_dt2.py can be thought as a similar approach to [SNAIL](https://arxiv.org/abs/1707.03141) (CVPR 2018, N Mishra et al.) without their shuffling method. 
+- seqskip_train_MH_seq1H_v3_dt2.py can be thought as a similar approach to [SNAIL](https://arxiv.org/abs/1707.03141) (CVPR 2018, N Mishra et al.) without their data shuffling method. 
 - [Distillation](https://arxiv.org/abs/1503.02531) (NIPS 2014, G Hinton et al.) approaches are in seqskip_train_T* and seqskip_train_S* for the teacher (Surprisingly, aacc>0.8 in validation, by using metadata for queries!!) and student nets, respectively. We beilieve that this approach can be an intersting issue at the workshop!
 - etc.
 
