@@ -1,6 +1,7 @@
 # mimbres/seqskip:[Spotify Sequential Skip Prediction Challenge](https://www.crowdai.org/challenges/spotify-sequential-skip-prediction-challenge)
 
 (Since 9th Dec 2018)
+
 Our best submission result (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
 - For test, seqskip_test_seq1.py
 - This model consists of highway layers(or GLUs) and dilated convolution layers.
