@@ -17,6 +17,9 @@ Other approaches (in progress):
 - etc.
 
 # Note that we did not use any external data nor pre-trained model.
+# Data split:
+- 80% for training
+- 20% for validation
 # System requirements:
 - PyTorch 0.4 or 1.0
 - pandas, numpy
