@@ -9,7 +9,7 @@ Other approaches (in progress):
 - 2 stack large generative model (not submitted) is very slow, seqskip_train_GenLog1H_Skip1eH256full.py
 - "Learn to compare", a relation-net based meta-leraning approach is in seqskip_train_rnbc1*.py
 - "Learn to compare" with Some improvement is in seqskip_train_rnbc2*.py
-- Distillation approaches are in seqskip_train_T* and seqskip_train_S*. 
+- Distillation approaches are in seqskip_train_T* and seqskip_train_S* for the teacher and student nets, respectively.
 - etc.
 
 # Note that we did not use any external data nor pre-trained model.
