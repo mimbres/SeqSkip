@@ -147,7 +147,7 @@ def validate(mval_loader, SM, LFM_model, eval_mode):
         sq_state[:,:11,0] = 1
         
         x_audio = x[:,:,41:].data.clone()
-        x_audio = Variable(x_audio, requires_grad=False).cuda()
+        x_audio = Variable(x_audio, requires_grad=False).cuda(GPU)
         x_emb_lastfm, x_lastfm = LFM_model(x_audio)
         x_lastfm = x_lastfm.cpu()
         del x_emb_lastfm
@@ -266,7 +266,7 @@ def main():
             sq_state[:,:11,0] = 1
             # compute lastfm_output
             x_audio = x[:,:,41:].data.clone()
-            x_audio = Variable(x_audio, requires_grad=False).cuda()
+            x_audio = Variable(x_audio, requires_grad=False).cuda(GPU)
             x_emb_lastfm, x_lastfm = LFM_model(x_audio)
             x_lastfm = x_lastfm.cpu()
             del x_emb_lastfm
