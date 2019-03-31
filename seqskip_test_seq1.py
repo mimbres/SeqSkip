@@ -37,7 +37,7 @@ print('Initializing dataloader...')
 mtest_loader  = SpotifyDataloader(config_fpath=args.config,
                                   mtrain_mode=False, # False = testset for submission
                                   #data_sel=(0, 100),
-                                  batch_size=4096,
+                                  batch_size=1792,
                                   shuffle=False,
                                   seq_mode=True) 
 
