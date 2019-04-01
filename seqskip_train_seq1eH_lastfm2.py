@@ -317,7 +317,7 @@ def main():
             
             if (session+1)%20000 == 0:
                  # Validation
-                 validate(mval_loader, SM, eval_mode=True)
+                 validate(mval_loader, SM, LFM_model, eval_mode=True)
                  # Save
                  torch.save({'ep': epoch, 'sess':session, 'SM_state': SM.state_dict(),'loss': hist_trloss[-1], 'hist_vacc': hist_vacc,
                              'hist_vloss': hist_vloss, 'hist_trloss': hist_trloss, 'SM_opt_state': SM_optim.state_dict(),
