@@ -2,14 +2,6 @@
 (Since 9th Dec 2018)
 [Paper, WSDM 2019 Cup Result](https://arxiv.org/abs/1901.08203)
 
-# Pre-processed data for using memmap
-https://storage.googleapis.com/skchang_data/seqskip/data/tr_log_memmap.dat
-https://storage.googleapis.com/skchang_data/seqskip/data/tr_session_split_idx.npy
-https://storage.googleapis.com/skchang_data/seqskip/data/track_feat.npy
-https://storage.googleapis.com/skchang_data/seqskip/data/ts_log_memmap.dat
-https://storage.googleapis.com/skchang_data/seqskip/data/ts_session_split_idx.npy
-(Updated, Apr 2020)
-
 # Summary
 Our best submission result (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
 - For test, seqskip_test_seq1.py
@@ -46,6 +38,15 @@ Other approaches (in progress):
   - Number of click fwd/backwd was minmax normalized after taking logarithm.
   - We didn't make use of dates.
   - Acoustic echonest features were standardized to mean=0 and std=1.
+
+# Download pre-processed data (speed-up training with memmap)
+https://storage.googleapis.com/skchang_data/seqskip/data/tr_log_memmap.dat
+https://storage.googleapis.com/skchang_data/seqskip/data/tr_session_split_idx.npy
+https://storage.googleapis.com/skchang_data/seqskip/data/track_feat.npy
+https://storage.googleapis.com/skchang_data/seqskip/data/ts_log_memmap.dat
+https://storage.googleapis.com/skchang_data/seqskip/data/ts_session_split_idx.npy
+(Updated, Apr 2020)
+
  
 # Plots:
 - plot_dataset.py can display some useful stats of Spotify dataset. You can see them in /images folder.
