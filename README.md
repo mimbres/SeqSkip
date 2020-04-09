@@ -53,5 +53,5 @@ Other approaches (in progress):
 # This repository needs clean-up!
 
 
-rayno1@snu.ac.kr
+skchang@cochlear.ai
 
