@@ -1,8 +1,15 @@
 # mimbres/seqskip:[Spotify Sequential Skip Prediction Challenge](https://www.crowdai.org/challenges/spotify-sequential-skip-prediction-challenge)
-
 (Since 9th Dec 2018)
-[Paper](https://arxiv.org/abs/1901.08203) 
+[Paper, WSDM 2019 Cup Result](https://arxiv.org/abs/1901.08203)
 
+# Pre-processed data for using memmap (Apr 2020)
+https://storage.googleapis.com/skchang_data/seqskip/data/tr_log_memmap.dat
+https://storage.googleapis.com/skchang_data/seqskip/data/tr_session_split_idx.npy
+https://storage.googleapis.com/skchang_data/seqskip/data/track_feat.npy
+https://storage.googleapis.com/skchang_data/seqskip/data/ts_log_memmap.dat
+https://storage.googleapis.com/skchang_data/seqskip/data/ts_session_split_idx.npy
+
+# Summary
 Our best submission result (aacc=0.637) with sequence learning was based on seqskip_train_seq1HL.py
 - For test, seqskip_test_seq1.py
 - This model consists of highway layers(or GLUs) and dilated convolution layers.
