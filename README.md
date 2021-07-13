@@ -53,6 +53,3 @@ https://storage.googleapis.com/skchang_data/seqskip/data/ts_session_split_idx.np
 
 # This repository needs clean-up!
 
-
-skchang@cochlear.ai
-
