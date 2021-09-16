@@ -47,7 +47,17 @@ https://storage.googleapis.com/skchang_data/seqskip/data/ts_log_memmap.dat
 https://storage.googleapis.com/skchang_data/seqskip/data/ts_session_split_idx.npy
 (Updated, Apr 2020)
 
- 
+# Download original dataset without login
+- [Training_Set_Split_Download.txt](https://crowdai-prd.s3.eu-central-1.amazonaws.com/dataset_files/challenge_50/2cb466df-239c-4fbb-9883-7ff784a2b5e9_Training_Set_Split_Download.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAILFF3ZEGG7Y4HXEQ%2F20210916%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20210916T141007Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=f7dc0bbda1625647acdef122c029cdc9a1d638408aecfa6137dc6b952e3f6263)
+- [Sample_Submissions.tar.gz](https://os.zhdk.cloud.switch.ch/swift/v1/crowdai-public/spotify-sequential-skip-prediction-challenge/20181113_submissions.tar.gz)
+- [Training_Set.tar.gz](https://os.zhdk.cloud.switch.ch/swift/v1/crowdai-public/spotify-sequential-skip-prediction-challenge/20181113_training_set.tar.gz)
+- [Dataset Description](https://crowdai-prd.s3.eu-central-1.amazonaws.com/dataset_files/challenge_50/7dcfad42-65c6-4481-abe8-5a44339fa305_Dataset%20Description.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAILFF3ZEGG7Y4HXEQ%2F20210916%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20210916T141008Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=79e00ec4fc5a8d083aa77a3da93694d86525b8c9904e9850f9cb1b36b8a9c212)
+- [Terms and Conditions](https://crowdai-prd.s3.eu-central-1.amazonaws.com/dataset_files/challenge_50/7826027a-c745-4faa-94ec-bae6783fdc41_Terms%20and%20Conditions.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAILFF3ZEGG7Y4HXEQ%2F20210916%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20210916T141008Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=2de282e848c52d86c4827b6465d33956d148dd6cafbe8079e51de8f2961048b7)
+- [Track_Features.tar.gz](https://os.zhdk.cloud.switch.ch/swift/v1/crowdai-public/spotify-sequential-skip-prediction-challenge/20181120_track_features.tar.gz)
+- [Test_Set.tar.gz](https://os.zhdk.cloud.switch.ch/swift/v1/crowdai-public/spotify-sequential-skip-prediction-challenge/20181113_test_set.tar.gz)
+- [Training_Set_And_Track_Features_Mini](https://crowdai-prd.s3.eu-central-1.amazonaws.com/dataset_files/challenge_50/16772e7f-7871-4d42-a44f-5f399f40fd94_training_set_track_features_mini.tar.gz?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAILFF3ZEGG7Y4HXEQ%2F20210916%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20210916T141008Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=cb96dfffbe00d19bcbbf06332944c4ec6dc56aaf0778e895ba17fd7c3f42450d)
+(Updated, Sep 2021)
+
 # Plots:
 - plot_dataset.py can display some useful stats of Spotify dataset. You can see them in /images folder.
 
